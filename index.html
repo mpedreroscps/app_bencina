@@ -10,16 +10,17 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body {
-    font-family: 'DM Sans', system-ui, sans-serif;
-    background: #FAF7F0;
-    -webkit-font-smoothing: antialiased;
-  }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #FAF7F0; -webkit-font-smoothing: antialiased; }
   .font-display { font-family: 'Fraunces', Georgia, serif; }
   .font-body { font-family: 'DM Sans', system-ui, sans-serif; }
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   input[type="number"] { -moz-appearance: textfield; }
+  @keyframes slideDown {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .animate-slideDown { animation: slideDown 0.3s ease-out; }
 </style>
 </head>
 <body>
@@ -32,55 +33,72 @@
 <script type="text/babel">
 const { useState, useMemo } = React;
 
-// ==================== ICONS ====================
+// ==================== ICONOS ====================
 const Icon = ({ children, className = "w-4 h-4", strokeWidth = 2 }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-    {children}
-  </svg>
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
 );
 const FuelIcon = (p) => <Icon {...p}><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></Icon>;
 const PlusIcon = (p) => <Icon {...p}><path d="M12 5v14"/><path d="M5 12h14"/></Icon>;
 const XIcon = (p) => <Icon {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Icon>;
-const WalletIcon = (p) => <Icon {...p}><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></Icon>;
 const ReceiptIcon = (p) => <Icon {...p}><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></Icon>;
 const AlertIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></Icon>;
 const RefreshIcon = (p) => <Icon {...p}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></Icon>;
+const SettingsIcon = (p) => <Icon {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></Icon>;
+const CheckIcon = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon>;
+const HomeIcon = (p) => <Icon {...p}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></Icon>;
+const CarIcon = (p) => <Icon {...p}><path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></Icon>;
+
+// Paleta de colores para personas nuevas
+const COLORES_DISPONIBLES = [
+  '#E76F51', '#52796F', '#3D5A80', '#E9C46A', '#9D4EDD',
+  '#F4A261', '#2A9D8F', '#BC4749', '#588157', '#6A4C93', '#F77F00'
+];
 
 // ==================== APP ====================
 function BencinaApp() {
+  // Configuración de conexión
   const [config, setConfig] = useState({ url: '', key: '' });
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [conductores, setConductores] = useState([]);
+
+  // Datos desde Supabase
+  const [personas, setPersonas] = useState([]);
   const [viajes, setViajes] = useState([]);
   const [cargas, setCargas] = useState([]);
+
+  // Estado de UI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState(null);
   const [showViaje, setShowViaje] = useState(false);
   const [showCarga, setShowCarga] = useState(false);
+  const [showPersonas, setShowPersonas] = useState(false);
 
-  const initialViaje = () => ({
-    conductor_id: '', monto_clp: '', fecha: new Date().toISOString().slice(0, 10),
-    descripcion: '', es_para_otra_persona: false, a_cuenta_de: ''
-  });
-  const [viajeForm, setViajeForm] = useState(initialViaje());
-
-  const initialCarga = () => ({
-    monto_clp: '', tipo: 'inicio_mes', quien_pago_id: '',
-    fecha: new Date().toISOString().slice(0, 10)
-  });
+  // Formularios
+  const today = () => new Date().toISOString().slice(0, 10);
+  const initialCarga = () => ({ fecha: today(), tipo: 'inicio_mes', pagado_por_id: '', autonomia_despues: '', monto_clp: '', litros: '' });
+  const initialViaje = () => ({ fecha: today(), conductor_id: '', km_recorridos: '', es_favor: false, para_quien_id: '', descripcion: '' });
+  const initialPersona = () => ({ nombre: '', tipo: 'miembro_hogar', color: '' });
   const [cargaForm, setCargaForm] = useState(initialCarga());
+  const [viajeForm, setViajeForm] = useState(initialViaje());
+  const [personaForm, setPersonaForm] = useState(initialPersona());
+  const [showCargaDetalles, setShowCargaDetalles] = useState(false);
 
+  // ==================== TOAST ====================
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 5000);
+  };
+
+  // ==================== SUPABASE ====================
   const supaFetch = async (path, options = {}) => {
     const baseUrl = config.url.replace(/\/$/, '').trim();
     const key = config.key.trim();
     const res = await fetch(`${baseUrl}/rest/v1/${path}`, {
       ...options,
       headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
+        apikey: key, Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json', Prefer: 'return=representation',
         ...(options.headers || {})
       }
     });
@@ -94,15 +112,14 @@ function BencinaApp() {
   const fetchAll = async () => {
     setLoading(true); setError('');
     try {
-      const [c, v, cg] = await Promise.all([
-        supaFetch('conductores?select=*&order=id'),
-        supaFetch('viajes?select=*&order=fecha.desc'),
-        supaFetch('cargas?select=*&order=fecha.desc')
+      const [p, v, cg] = await Promise.all([
+        supaFetch('personas?select=*&order=tipo,id'),
+        supaFetch('viajes?select=*&order=created_at.desc'),
+        supaFetch('cargas?select=*&order=created_at.desc')
       ]);
-      setConductores(c); setViajes(v); setCargas(cg);
-    } catch (e) {
-      setError(e.message);
-    } finally { setLoading(false); }
+      setPersonas(p); setViajes(v); setCargas(cg);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
   };
 
   const connect = async () => {
@@ -110,7 +127,7 @@ function BencinaApp() {
     try {
       const baseUrl = config.url.replace(/\/$/, '').trim();
       const key = config.key.trim();
-      const res = await fetch(`${baseUrl}/rest/v1/conductores?select=*&limit=1`, {
+      const res = await fetch(`${baseUrl}/rest/v1/personas?select=*&limit=1`, {
         headers: { apikey: key, Authorization: `Bearer ${key}` }
       });
       if (!res.ok) {
@@ -119,88 +136,168 @@ function BencinaApp() {
       }
       setConnected(true);
       await fetchAll();
-    } catch (e) {
-      setError(e.message);
-    } finally { setConnecting(false); }
+    } catch (e) { setError(e.message); }
+    finally { setConnecting(false); }
+  };
+
+  // ==================== DATOS DERIVADOS ====================
+  const conductores = useMemo(() => personas.filter(p => p.tipo === 'conductor'), [personas]);
+  const miembros = useMemo(() => personas.filter(p => p.tipo === 'miembro_hogar'), [personas]);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  // Nivel actual del estanque (km)
+  // = autonomía después de la última carga − km recorridos posteriores a esa carga
+  const nivelActual = useMemo(() => {
+    if (cargas.length === 0) return 0;
+    const ordenadas = [...cargas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const ultima = ordenadas[0];
+    const ultimaTime = new Date(ultima.created_at);
+    const consumido = viajes
+      .filter(v => new Date(v.created_at) > ultimaTime)
+      .reduce((s, v) => s + v.km_recorridos, 0);
+    return Math.max(0, ultima.autonomia_despues - consumido);
+  }, [cargas, viajes]);
+
+  // Balance por conductor (mes actual, en km)
+  const conductorBalances = useMemo(() => {
+    const N = conductores.length;
+    if (N === 0) return [];
+    return conductores.map(c => {
+      const cargasMes = cargas.filter(carga => carga.fecha.startsWith(currentMonth));
+      const aporte_propio = cargasMes
+        .filter(carga => carga.pagado_por_id === c.id)
+        .reduce((s, carga) => s + carga.km_aportados, 0);
+      const aporte_recibido = cargasMes
+        .filter(carga => {
+          const persona = personas.find(p => p.id === carga.pagado_por_id);
+          return persona?.tipo === 'miembro_hogar';
+        })
+        .reduce((s, carga) => s + carga.km_aportados / N, 0);
+      const consumo = viajes
+        .filter(v => v.conductor_id === c.id && v.fecha.startsWith(currentMonth))
+        .reduce((s, v) => s + v.km_recorridos, 0);
+      return {
+        ...c,
+        aporte_propio,
+        aporte_recibido: Math.round(aporte_recibido),
+        consumo,
+        balance: Math.round((aporte_propio + aporte_recibido) - consumo)
+      };
+    });
+  }, [conductores, personas, cargas, viajes, currentMonth]);
+
+  // Aportes de miembros del hogar (mes actual)
+  const miembroAportes = useMemo(() => miembros.map(m => {
+    const aportado = cargas
+      .filter(c => c.pagado_por_id === m.id && c.fecha.startsWith(currentMonth))
+      .reduce((s, c) => s + c.km_aportados, 0);
+    const recibido = viajes
+      .filter(v => v.es_favor && v.para_quien_id === m.id && v.fecha.startsWith(currentMonth))
+      .reduce((s, v) => s + v.km_recorridos, 0);
+    return { ...m, aportado, recibido };
+  }), [miembros, cargas, viajes, currentMonth]);
+
+  // Próximo en cargar = balance más negativo
+  const proximo = conductorBalances.length
+    ? [...conductorBalances].sort((a, b) => a.balance - b.balance)[0]
+    : null;
+
+  // ==================== ACCIONES ====================
+  const saveCarga = async () => {
+    if (!cargaForm.pagado_por_id || !cargaForm.autonomia_despues) {
+      setError('Selecciona quién pagó y la autonomía después de cargar');
+      return;
+    }
+    setLoading(true); setError('');
+    try {
+      const autonomia = parseInt(cargaForm.autonomia_despues);
+      const km_aportados = autonomia - nivelActual;
+      const persona = personas.find(p => p.id === parseInt(cargaForm.pagado_por_id));
+
+      await supaFetch('cargas', {
+        method: 'POST',
+        body: JSON.stringify({
+          fecha: cargaForm.fecha,
+          tipo: cargaForm.tipo,
+          pagado_por_id: parseInt(cargaForm.pagado_por_id),
+          autonomia_despues: autonomia,
+          km_aportados: km_aportados,
+          monto_clp: cargaForm.monto_clp ? parseInt(cargaForm.monto_clp) : null,
+          litros: cargaForm.litros ? parseFloat(cargaForm.litros) : null
+        })
+      });
+      setShowCarga(false);
+      setCargaForm(initialCarga());
+      setShowCargaDetalles(false);
+      await fetchAll();
+
+      if (persona?.tipo === 'miembro_hogar') {
+        const N = conductores.length;
+        const perConductor = N > 0 ? Math.round(km_aportados / N) : 0;
+        showToast(`Aportaste ${formatKm(km_aportados)}. Se repartirán entre los ${N} conductores: ${formatKm(perConductor)} cada uno`);
+      } else {
+        showToast(`Aportaste ${formatKm(km_aportados)} al pool`);
+      }
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
   };
 
   const saveViaje = async () => {
-    if (!viajeForm.conductor_id || !viajeForm.monto_clp) {
-      setError('Selecciona conductor y monto'); return;
+    if (!viajeForm.conductor_id || !viajeForm.km_recorridos) {
+      setError('Selecciona conductor y km recorridos'); return;
+    }
+    if (viajeForm.es_favor && !viajeForm.para_quien_id) {
+      setError('Selecciona para quién es el favor'); return;
     }
     setLoading(true); setError('');
     try {
       await supaFetch('viajes', {
         method: 'POST',
         body: JSON.stringify({
-          conductor_id: parseInt(viajeForm.conductor_id),
-          monto_clp: parseInt(viajeForm.monto_clp),
           fecha: viajeForm.fecha,
-          descripcion: viajeForm.descripcion || null,
-          es_para_otra_persona: viajeForm.es_para_otra_persona,
-          a_cuenta_de: viajeForm.es_para_otra_persona ? viajeForm.a_cuenta_de : null
+          conductor_id: parseInt(viajeForm.conductor_id),
+          km_recorridos: parseInt(viajeForm.km_recorridos),
+          es_favor: viajeForm.es_favor,
+          para_quien_id: viajeForm.es_favor ? parseInt(viajeForm.para_quien_id) : null,
+          descripcion: viajeForm.descripcion || null
         })
       });
-      setShowViaje(false); setViajeForm(initialViaje());
+      setShowViaje(false);
+      setViajeForm(initialViaje());
       await fetchAll();
+      showToast(`Viaje de ${formatKm(parseInt(viajeForm.km_recorridos))} registrado`);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
 
-  const saveCarga = async () => {
-    if (!cargaForm.quien_pago_id || !cargaForm.monto_clp) {
-      setError('Selecciona quién pagó y monto'); return;
-    }
+  const savePersona = async () => {
+    if (!personaForm.nombre.trim()) { setError('Ingresa un nombre'); return; }
     setLoading(true); setError('');
     try {
-      await supaFetch('cargas', {
+      const coloresUsados = personas.map(p => p.color);
+      const colorAsignado = personaForm.color || COLORES_DISPONIBLES.find(c => !coloresUsados.includes(c)) || '#888';
+      await supaFetch('personas', {
         method: 'POST',
         body: JSON.stringify({
-          monto_clp: parseInt(cargaForm.monto_clp),
-          tipo: cargaForm.tipo,
-          quien_pago_id: parseInt(cargaForm.quien_pago_id),
-          fecha: cargaForm.fecha
+          nombre: personaForm.nombre.trim(),
+          tipo: personaForm.tipo,
+          color: colorAsignado
         })
       });
-      setShowCarga(false); setCargaForm(initialCarga());
+      const nombreGuardado = personaForm.nombre.trim();
+      setPersonaForm(initialPersona());
       await fetchAll();
+      showToast(`${nombreGuardado} agregada/o`);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
 
-  const formatCLP = (n) => '$' + (n || 0).toLocaleString('es-CL');
+  // ==================== HELPERS ====================
+  const formatKm = (n) => (Math.round(n || 0)).toLocaleString('es-CL') + ' km';
+  const colorByLevel = (km) => km > 100 ? '#52796F' : km > 50 ? '#E9C46A' : '#BC4749';
+  const labelByLevel = (km) => km > 100 ? 'óptimo' : km > 50 ? 'medio' : 'bajo';
 
-  const saldos = useMemo(() => conductores.map(c => {
-    const aportes = cargas.filter(carga => carga.quien_pago_id === c.id).reduce((a, b) => a + b.monto_clp, 0);
-    const consumo = viajes.filter(v => v.conductor_id === c.id && !v.es_para_otra_persona).reduce((a, b) => a + b.monto_clp, 0);
-    return { ...c, aportes, consumo, saldo: aportes - consumo };
-  }), [conductores, viajes, cargas]);
-
-  const totalCargado = cargas.reduce((a, b) => a + b.monto_clp, 0);
-  const totalConsumido = viajes.reduce((a, b) => a + b.monto_clp, 0);
-  const restante = totalCargado - totalConsumido;
-  const proximo = saldos.length ? [...saldos].sort((a, b) => a.saldo - b.saldo)[0] : null;
-
-  const deudasExternas = useMemo(() => {
-    const map = {};
-    viajes.filter(v => v.es_para_otra_persona && v.a_cuenta_de).forEach(v => {
-      map[v.a_cuenta_de] = (map[v.a_cuenta_de] || 0) + v.monto_clp;
-    });
-    return Object.entries(map).map(([n, m]) => ({ nombre: n, monto: m }));
-  }, [viajes]);
-
-  const movimientos = useMemo(() => {
-    const m = [
-      ...viajes.map(v => ({ tipo: 'viaje', id: 'v' + v.id, fecha: v.fecha, monto: v.monto_clp,
-        conductor_id: v.conductor_id, descripcion: v.descripcion,
-        es_para_otra_persona: v.es_para_otra_persona, a_cuenta_de: v.a_cuenta_de })),
-      ...cargas.map(c => ({ tipo: 'carga', id: 'c' + c.id, fecha: c.fecha, monto: c.monto_clp,
-        conductor_id: c.quien_pago_id, descripcion: c.tipo }))
-    ];
-    return m.sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 20);
-  }, [viajes, cargas]);
-
-  // ========== SETUP ==========
+  // ==================== PANTALLA DE SETUP ====================
   if (!connected) {
     return (
       <div className="min-h-screen w-full font-body" style={{ background: '#FAF7F0' }}>
@@ -210,8 +307,7 @@ function BencinaApp() {
               <FuelIcon className="w-8 h-8 text-white" />
             </div>
             <h1 className="font-display" style={{ fontWeight: 600, fontSize: '2.5rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
-              Bencina<br />
-              <span className="italic" style={{ color: '#E76F51' }}>Compartida</span>
+              Bencina<br /><span className="italic" style={{ color: '#E76F51' }}>Compartida</span>
             </h1>
             <p className="mt-4 text-stone-600 text-sm">Conecta tu Supabase para empezar</p>
           </div>
@@ -219,90 +315,86 @@ function BencinaApp() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1.5 uppercase tracking-widest">Project URL</label>
-                <input type="text" placeholder="https://xxxxx.supabase.co"
-                  value={config.url} onChange={e => setConfig({ ...config, url: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-body" />
+                <input type="text" placeholder="https://xxxxx.supabase.co" value={config.url} onChange={e => setConfig({ ...config, url: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-body" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1.5 uppercase tracking-widest">anon public key</label>
-                <input type="password" placeholder="eyJhbGc..."
-                  value={config.key} onChange={e => setConfig({ ...config, key: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-body" />
+                <input type="password" placeholder="eyJhbGc..." value={config.key} onChange={e => setConfig({ ...config, key: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-body" />
               </div>
-              {error && (
-                <div className="flex gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
-                  <AlertIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span className="break-words">{error}</span>
-                </div>
-              )}
-              <button onClick={connect} disabled={connecting || !config.url || !config.key}
-                className="w-full py-3 rounded-lg text-white font-medium text-sm transition-all disabled:opacity-40 hover:opacity-90"
-                style={{ background: '#1c1917' }}>
+              {error && (<div className="flex gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800"><AlertIcon className="w-4 h-4 flex-shrink-0 mt-0.5" /><span className="break-words">{error}</span></div>)}
+              <button onClick={connect} disabled={connecting || !config.url || !config.key} className="w-full py-3 rounded-lg text-white font-medium text-sm transition-all disabled:opacity-40 hover:opacity-90" style={{ background: '#1c1917' }}>
                 {connecting ? 'Conectando...' : 'Conectar →'}
               </button>
             </div>
           </div>
-          <p className="text-xs text-stone-500 text-center mt-6 leading-relaxed">
-            Ambos datos están en Supabase →<br />
-            <span className="font-medium text-stone-700">Settings → API</span>
-          </p>
+          <p className="text-xs text-stone-500 text-center mt-6 leading-relaxed">Ambos datos están en Supabase →<br /><span className="font-medium text-stone-700">Settings → API</span></p>
         </div>
       </div>
     );
   }
 
-  // ========== MAIN ==========
+  // ==================== APP PRINCIPAL ====================
+  const nivelColor = colorByLevel(nivelActual);
+  const maxConsumo = Math.max(...conductorBalances.map(c => c.consumo), 1);
+
   return (
     <div className="min-h-screen w-full pb-32 font-body" style={{ background: '#FAF7F0' }}>
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed top-3 left-3 right-3 z-[60] max-w-md mx-auto animate-slideDown">
+          <div className="rounded-xl p-3 shadow-lg flex items-start gap-2.5 text-white text-sm" style={{ background: toast.type === 'error' ? '#BC4749' : '#1c1917' }}>
+            <CheckIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span className="flex-1">{toast.msg}</span>
+            <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100"><XIcon className="w-3.5 h-3.5" /></button>
+          </div>
+        </div>
+      )}
+
+      {/* HEADER */}
       <header className="px-5 pt-8 pb-6">
         <div className="flex items-end justify-between mb-1">
           <h1 className="font-display" style={{ fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
             Bencina <span className="italic" style={{ color: '#E76F51' }}>Compartida</span>
           </h1>
-          <button onClick={fetchAll} disabled={loading}
-            className="text-xs text-stone-600 hover:text-stone-900 flex items-center gap-1 disabled:opacity-50">
-            <RefreshIcon className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? '' : 'Actualizar'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setShowPersonas(true)} className="text-stone-600 hover:text-stone-900" title="Personas"><SettingsIcon className="w-4 h-4" /></button>
+            <button onClick={fetchAll} disabled={loading} className="text-xs text-stone-600 hover:text-stone-900 flex items-center gap-1 disabled:opacity-50">
+              <RefreshIcon className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />{loading ? '' : 'Actualizar'}
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-stone-500 mt-2">{conductores.map(c => c.nombre).join(' · ')}</p>
+        <p className="text-xs text-stone-500 mt-2">{personas.map(p => p.nombre).join(' · ')}</p>
       </header>
 
       <div className="px-5">
-        {/* Hero */}
+
+        {/* HERO: KM DE AUTONOMÍA */}
         <div className="rounded-3xl p-6 mb-4 relative overflow-hidden" style={{ background: '#1c1917' }}>
-          <div className="absolute top-0 right-0 w-48 h-48 rounded-full" style={{ background: '#E9C46A', opacity: 0.18, transform: 'translate(35%, -35%)', filter: 'blur(2px)' }} />
-          <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full" style={{ background: '#E76F51', opacity: 0.1, transform: 'translate(-40%, 40%)', filter: 'blur(4px)' }} />
+          <div className="absolute top-0 right-0 w-48 h-48 rounded-full" style={{ background: nivelColor, opacity: 0.22, transform: 'translate(35%, -35%)', filter: 'blur(2px)' }} />
+          <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full" style={{ background: nivelColor, opacity: 0.1, transform: 'translate(-40%, 40%)', filter: 'blur(4px)' }} />
           <div className="relative">
-            <div className="flex items-center gap-2 text-stone-400 text-xs uppercase tracking-widest mb-3 font-semibold">
-              <FuelIcon className="w-3.5 h-3.5" />Bencina restante
+            <div className="flex items-center gap-2 text-stone-400 uppercase tracking-widest mb-3 font-semibold" style={{ fontSize: '11px' }}>
+              <FuelIcon className="w-3.5 h-3.5" />Quedan de autonomía
             </div>
-            <div className="text-white font-display" style={{ fontWeight: 500, fontSize: '3rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
-              {formatCLP(restante)}
+            <div className="font-display flex items-baseline gap-2" style={{ color: nivelColor, fontWeight: 600, fontSize: '3.5rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
+              {(nivelActual).toLocaleString('es-CL')}
+              <span className="text-stone-400 font-body" style={{ fontSize: '1.25rem', fontWeight: 500 }}>km</span>
             </div>
-            <div className="mt-5 flex items-center gap-5 text-xs">
-              <div>
-                <span className="block text-stone-500 uppercase tracking-wider mb-0.5" style={{fontSize:'10px'}}>cargado</span>
-                <span className="text-stone-200 font-medium text-sm">{formatCLP(totalCargado)}</span>
-              </div>
-              <div className="w-px h-9 bg-stone-700" />
-              <div>
-                <span className="block text-stone-500 uppercase tracking-wider mb-0.5" style={{fontSize:'10px'}}>consumido</span>
-                <span className="text-stone-200 font-medium text-sm">{formatCLP(totalConsumido)}</span>
-              </div>
+            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: `${nivelColor}30` }}>
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: nivelColor }} />
+              <span className="text-xs uppercase tracking-wider font-medium" style={{ color: nivelColor }}>nivel {labelByLevel(nivelActual)}</span>
             </div>
           </div>
         </div>
 
-        {/* Próximo */}
-        {proximo && proximo.saldo < 0 && (
+        {/* PRÓXIMO EN CARGAR */}
+        {proximo && proximo.balance < 0 && (
           <div className="rounded-2xl p-4 mb-4 flex items-center justify-between bg-white" style={{ border: `2px solid ${proximo.color}` }}>
             <div>
-              <div className="uppercase tracking-widest text-stone-500 mb-1 font-semibold" style={{fontSize:'10px'}}>Próximo en cargar</div>
-              <div className="font-display" style={{ color: proximo.color, fontWeight: 600, fontSize: '1.5rem', letterSpacing: '-0.01em' }}>
-                {proximo.nombre}
-              </div>
-              <div className="text-xs text-stone-600 mt-0.5">debe {formatCLP(Math.abs(proximo.saldo))}</div>
+              <div className="uppercase tracking-widest text-stone-500 mb-1 font-semibold" style={{ fontSize: '10px' }}>Próximo en cargar</div>
+              <div className="font-display" style={{ color: proximo.color, fontWeight: 600, fontSize: '1.5rem', letterSpacing: '-0.01em' }}>{proximo.nombre}</div>
+              <div className="text-xs text-stone-600 mt-0.5">debe {formatKm(Math.abs(proximo.balance))} este mes</div>
             </div>
             <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: proximo.color }}>
               <FuelIcon className="w-5 h-5 text-white" />
@@ -310,200 +402,330 @@ function BencinaApp() {
           </div>
         )}
 
-        {/* Saldos */}
-        <div className="bg-white rounded-2xl border border-stone-200 mb-4 overflow-hidden">
-          <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 flex items-center gap-1.5 font-semibold" style={{fontSize:'10px'}}>
-            <WalletIcon className="w-3 h-3" />Saldos
-          </div>
-          {saldos.map((s, i) => (
-            <div key={s.id} className={`px-5 py-4 flex items-center justify-between ${i < saldos.length - 1 ? 'border-b border-stone-100' : ''}`}>
-              <div className="flex items-center gap-3">
-                <div className="w-1.5 h-11 rounded-full" style={{ background: s.color }} />
-                <div>
-                  <div className="font-medium text-stone-900">{s.nombre}</div>
-                  <div className="text-xs text-stone-500 mt-0.5">
-                    {formatCLP(s.aportes)} aportado · {formatCLP(s.consumo)} usado
+        {/* CONDUCTORES */}
+        {conductorBalances.length > 0 && (
+          <div className="bg-white rounded-2xl border border-stone-200 mb-4 overflow-hidden">
+            <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 flex items-center gap-1.5 font-semibold" style={{ fontSize: '10px' }}>
+              <CarIcon className="w-3 h-3" />Conductores · este mes
+            </div>
+            {conductorBalances.map((c, i) => (
+              <div key={c.id} className={`px-5 py-3.5 ${i < conductorBalances.length - 1 ? 'border-b border-stone-100' : ''}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-1.5 h-9 rounded-full" style={{ background: c.color }} />
+                    <div className="font-medium text-stone-900">{c.nombre}</div>
+                  </div>
+                  <div className={`font-display ${c.balance < 0 ? 'text-red-600' : c.balance > 0 ? 'text-emerald-700' : 'text-stone-600'}`} style={{ fontWeight: 600, fontSize: '1.125rem', letterSpacing: '-0.01em' }}>
+                    {c.balance >= 0 ? '+' : ''}{formatKm(c.balance)}
                   </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className={`font-display ${s.saldo < 0 ? 'text-red-600' : s.saldo > 0 ? 'text-emerald-700' : 'text-stone-600'}`} style={{ fontWeight: 600, fontSize: '1.125rem', letterSpacing: '-0.01em' }}>
-                  {s.saldo >= 0 ? '+' : ''}{formatCLP(s.saldo)}
+                <div className="text-xs text-stone-500 ml-5">
+                  aportó <span className="text-stone-700 font-medium">{formatKm(c.aporte_propio)}</span>
+                  {' · '}recibió <span className="text-stone-700 font-medium">{formatKm(c.aporte_recibido)}</span>
+                  {' · '}consumió <span className="text-stone-700 font-medium">{formatKm(c.consumo)}</span>
                 </div>
-                <div className="text-stone-500 uppercase tracking-wider" style={{fontSize:'10px'}}>
-                  {s.saldo < 0 ? 'debe' : s.saldo > 0 ? 'le deben' : 'al día'}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Deudas externas */}
-        {deudasExternas.length > 0 && (
-          <div className="bg-white rounded-2xl border border-stone-200 mb-4 overflow-hidden">
-            <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 font-semibold" style={{fontSize:'10px'}}>Deudas externas</div>
-            {deudasExternas.map((d, i) => (
-              <div key={i} className={`px-5 py-3 flex items-center justify-between ${i < deudasExternas.length - 1 ? 'border-b border-stone-100' : ''}`}>
-                <div className="text-stone-800 capitalize">{d.nombre}</div>
-                <div className="font-medium text-stone-900">{formatCLP(d.monto)}</div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Movimientos */}
-        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-          <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 font-semibold" style={{fontSize:'10px'}}>Movimientos</div>
-          {movimientos.length === 0 ? (
-            <div className="px-5 py-8 text-center text-sm text-stone-500">
-              <p>Aún sin movimientos.</p>
-              <p className="text-xs mt-1">Toca + Viaje o Cargar para empezar</p>
+        {/* APORTES DEL HOGAR */}
+        {miembroAportes.length > 0 && (
+          <div className="bg-white rounded-2xl border border-stone-200 mb-4 overflow-hidden">
+            <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 flex items-center gap-1.5 font-semibold" style={{ fontSize: '10px' }}>
+              <HomeIcon className="w-3 h-3" />Hogar · este mes
             </div>
-          ) : (
-            movimientos.map((m, i) => {
-              const conductor = conductores.find(c => c.id === m.conductor_id);
-              return (
-                <div key={m.id} className={`px-5 py-3 flex items-center gap-3 ${i < movimientos.length - 1 ? 'border-b border-stone-100' : ''}`}>
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: m.tipo === 'carga' ? '#E9C46A' : conductor?.color || '#999' }}>
-                    {m.tipo === 'carga' ? <PlusIcon className="w-4 h-4 text-stone-900" strokeWidth={2.5} /> : <FuelIcon className="w-4 h-4 text-white" />}
+            {miembroAportes.map((m, i) => (
+              <div key={m.id} className={`px-5 py-3 ${i < miembroAportes.length - 1 ? 'border-b border-stone-100' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-1.5 h-7 rounded-full" style={{ background: m.color }} />
+                    <div className="text-stone-900">{m.nombre}</div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-stone-900 truncate">
-                      {m.tipo === 'carga' ? `Carga · ${m.descripcion?.replace('_', ' ')}` : (m.descripcion || (m.es_para_otra_persona ? `Para ${m.a_cuenta_de}` : 'Viaje'))}
-                    </div>
-                    <div className="text-xs text-stone-500">
-                      {conductor?.nombre} · {new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
-                    </div>
-                  </div>
-                  <div className={`text-sm font-semibold ${m.tipo === 'carga' ? 'text-emerald-700' : 'text-stone-900'}`}>
-                    {m.tipo === 'carga' ? '+' : '−'}{formatCLP(m.monto)}
+                  <div className="text-xs text-stone-500">
+                    aportó <span className="text-stone-700 font-medium">{formatKm(m.aportado)}</span>
+                    {' · '}usó <span className="text-stone-700 font-medium">{formatKm(m.recibido)}</span>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+              </div>
+            ))}
+            <div className="px-5 pb-3 pt-2 text-xs text-stone-500 italic">
+              Aportes del hogar se reparten equitativamente entre los conductores
+            </div>
+          </div>
+        )}
+
+        {/* MINI BAR CHART: CONSUMO POR CONDUCTOR */}
+        {conductorBalances.some(c => c.consumo > 0) && (
+          <div className="bg-white rounded-2xl border border-stone-200 mb-4 p-5">
+            <div className="uppercase tracking-widest text-stone-500 font-semibold mb-3" style={{ fontSize: '10px' }}>
+              Consumo del mes
+            </div>
+            <div className="space-y-2.5">
+              {conductorBalances.map(c => (
+                <div key={c.id} className="flex items-center gap-3">
+                  <div className="w-16 text-xs text-stone-700 truncate">{c.nombre}</div>
+                  <div className="flex-1 bg-stone-100 rounded-full h-2.5 relative overflow-hidden">
+                    <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${Math.max((c.consumo / maxConsumo) * 100, 2)}%`, background: c.color }} />
+                  </div>
+                  <div className="w-20 text-xs text-stone-900 font-medium text-right">{formatKm(c.consumo)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* MOVIMIENTOS RECIENTES */}
+        <Movimientos viajes={viajes} cargas={cargas} personas={personas} formatKm={formatKm} />
       </div>
 
-      {/* Botones */}
+      {/* BOTONES FLOTANTES */}
       <div className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-6" style={{ background: 'linear-gradient(to top, #FAF7F0 70%, rgba(250,247,240,0))' }}>
         <div className="max-w-md mx-auto flex gap-3">
-          <button onClick={() => { setError(''); setShowCarga(true); }}
-            className="flex-1 py-3.5 rounded-xl bg-white border-2 border-stone-900 font-medium text-sm text-stone-900 flex items-center justify-center gap-2 hover:bg-stone-50 transition-colors">
-            <ReceiptIcon className="w-4 h-4" />Cargar
+          <button onClick={() => { setError(''); setShowCarga(true); }} className="flex-1 py-3.5 rounded-xl bg-white border-2 border-stone-900 font-medium text-sm text-stone-900 flex items-center justify-center gap-2 hover:bg-stone-50 transition-colors">
+            <ReceiptIcon className="w-4 h-4" />Cargar bencina
           </button>
-          <button onClick={() => { setError(''); setShowViaje(true); }}
-            className="flex-1 py-3.5 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
-            style={{ background: '#1c1917' }}>
+          <button onClick={() => { setError(''); setShowViaje(true); }} className="flex-1 py-3.5 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
             <PlusIcon className="w-4 h-4" strokeWidth={2.5} />Viaje
           </button>
         </div>
       </div>
 
-      {/* Modal Viaje */}
-      {showViaje && (
-        <Modal title="Registrar viaje" onClose={() => setShowViaje(false)}>
+      {/* MODAL CARGA */}
+      {showCarga && (
+        <Modal title="Registrar carga" onClose={() => { setShowCarga(false); setShowCargaDetalles(false); }}>
           <div className="space-y-4">
-            <Field label="Conductor">
-              <div className="grid grid-cols-3 gap-2">
-                {conductores.map(c => (
-                  <button key={c.id} onClick={() => setViajeForm({ ...viajeForm, conductor_id: c.id })}
-                    className="py-2.5 rounded-lg text-sm font-medium border-2 transition-all"
-                    style={{
-                      borderColor: viajeForm.conductor_id === c.id ? c.color : '#e7e5e4',
-                      background: viajeForm.conductor_id === c.id ? c.color : 'white',
-                      color: viajeForm.conductor_id === c.id ? 'white' : '#1c1917'
-                    }}>
-                    {c.nombre}
+            <Field label="¿Quién pagó?">
+              <div className="space-y-2">
+                {personas.map(p => (
+                  <button key={p.id} onClick={() => setCargaForm({ ...cargaForm, pagado_por_id: p.id })} className="w-full py-2.5 px-3 rounded-lg text-sm font-medium border-2 transition-all flex items-center justify-between" style={{ borderColor: cargaForm.pagado_por_id === p.id ? p.color : '#e7e5e4', background: cargaForm.pagado_por_id === p.id ? p.color : 'white', color: cargaForm.pagado_por_id === p.id ? 'white' : '#1c1917' }}>
+                    <span className="flex items-center gap-2">
+                      {p.tipo === 'conductor' ? <CarIcon className="w-3.5 h-3.5" /> : <HomeIcon className="w-3.5 h-3.5" />}
+                      {p.nombre}
+                    </span>
+                    <span className="text-xs opacity-70 uppercase tracking-wider">{p.tipo === 'conductor' ? 'conductor' : 'hogar'}</span>
                   </button>
                 ))}
               </div>
             </Field>
-            <Field label="Monto (CLP)">
-              <input type="number" placeholder="20000" value={viajeForm.monto_clp}
-                onChange={e => setViajeForm({ ...viajeForm, monto_clp: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+
+            <Field label="Tipo">
+              <div className="grid grid-cols-3 gap-2">
+                {[{v:'inicio_mes',l:'Inicio mes'},{v:'dia_20',l:'Día 20'},{v:'extra',l:'Extra'}].map(t => (
+                  <button key={t.v} onClick={() => setCargaForm({ ...cargaForm, tipo: t.v })} className={`py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${cargaForm.tipo === t.v ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
+                    {t.l}
+                  </button>
+                ))}
+              </div>
             </Field>
+
+            <Field label="¿Cuántos km marca el tablero después de cargar?">
+              <input type="number" placeholder="450" value={cargaForm.autonomia_despues} onChange={e => setCargaForm({ ...cargaForm, autonomia_despues: e.target.value })} className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-body text-2xl font-display font-semibold text-center" style={{ letterSpacing: '-0.01em' }} />
+              {cargaForm.autonomia_despues && (
+                <p className="text-xs text-stone-500 mt-1.5 text-center">
+                  Aporte estimado: <span className="font-medium text-stone-800">{formatKm(parseInt(cargaForm.autonomia_despues) - nivelActual)}</span> al pool
+                  <br />
+                  <span className="text-[10px]">(antes había {formatKm(nivelActual)})</span>
+                </p>
+              )}
+            </Field>
+
             <Field label="Fecha">
-              <input type="date" value={viajeForm.fecha}
-                onChange={e => setViajeForm({ ...viajeForm, fecha: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+              <input type="date" value={cargaForm.fecha} onChange={e => setCargaForm({ ...cargaForm, fecha: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
             </Field>
-            <Field label="Descripción (opcional)">
-              <input type="text" placeholder="Ida al supermercado" value={viajeForm.descripcion}
-                onChange={e => setViajeForm({ ...viajeForm, descripcion: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
-            </Field>
-            <label className="flex items-center gap-2.5 cursor-pointer py-1">
-              <input type="checkbox" checked={viajeForm.es_para_otra_persona}
-                onChange={e => setViajeForm({ ...viajeForm, es_para_otra_persona: e.target.checked })}
-                className="w-4 h-4 accent-stone-900" />
-              <span className="text-sm text-stone-700">¿Manejé para otra persona?</span>
-            </label>
-            {viajeForm.es_para_otra_persona && (
-              <Field label="A cuenta de">
-                <input type="text" placeholder="Mamá, hermano, etc." value={viajeForm.a_cuenta_de}
-                  onChange={e => setViajeForm({ ...viajeForm, a_cuenta_de: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
-              </Field>
+
+            <button type="button" onClick={() => setShowCargaDetalles(!showCargaDetalles)} className="text-xs text-stone-500 hover:text-stone-800 underline">
+              {showCargaDetalles ? '− Ocultar detalles opcionales' : '+ Más detalles (CLP, litros)'}
+            </button>
+            {showCargaDetalles && (
+              <div className="space-y-3 pl-3 border-l-2 border-stone-200">
+                <Field label="Monto CLP (opcional)">
+                  <input type="number" placeholder="40000" value={cargaForm.monto_clp} onChange={e => setCargaForm({ ...cargaForm, monto_clp: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+                </Field>
+                <Field label="Litros (opcional)">
+                  <input type="number" step="0.01" placeholder="35.5" value={cargaForm.litros} onChange={e => setCargaForm({ ...cargaForm, litros: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+                </Field>
+              </div>
             )}
+
             {error && <ErrorBox msg={error} />}
-            <button onClick={saveViaje} disabled={loading}
-              className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
-              style={{ background: '#1c1917' }}>
+            <button onClick={saveCarga} disabled={loading} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
+              {loading ? 'Guardando...' : 'Guardar carga'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL VIAJE */}
+      {showViaje && (
+        <Modal title="Registrar viaje" onClose={() => setShowViaje(false)}>
+          <div className="space-y-4">
+            <Field label="Conductor">
+              {conductores.length === 0 ? (
+                <p className="text-xs text-red-700 bg-red-50 p-3 rounded-lg">No hay conductores. Agrega uno desde el ícono ⚙ arriba.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {conductores.map(c => (
+                    <button key={c.id} onClick={() => setViajeForm({ ...viajeForm, conductor_id: c.id })} className="py-2.5 rounded-lg text-sm font-medium border-2 transition-all" style={{ borderColor: viajeForm.conductor_id === c.id ? c.color : '#e7e5e4', background: viajeForm.conductor_id === c.id ? c.color : 'white', color: viajeForm.conductor_id === c.id ? 'white' : '#1c1917' }}>
+                      {c.nombre}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Field>
+
+            <Field label="Km recorridos">
+              <input type="number" placeholder="50" value={viajeForm.km_recorridos} onChange={e => setViajeForm({ ...viajeForm, km_recorridos: e.target.value })} className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-body text-2xl font-display font-semibold text-center" />
+            </Field>
+
+            <Field label="Fecha">
+              <input type="date" value={viajeForm.fecha} onChange={e => setViajeForm({ ...viajeForm, fecha: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+            </Field>
+
+            <Field label="Descripción (opcional)">
+              <input type="text" placeholder="Ida al supermercado" value={viajeForm.descripcion} onChange={e => setViajeForm({ ...viajeForm, descripcion: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+            </Field>
+
+            <label className="flex items-center gap-2.5 cursor-pointer py-1">
+              <input type="checkbox" checked={viajeForm.es_favor} onChange={e => setViajeForm({ ...viajeForm, es_favor: e.target.checked })} className="w-4 h-4 accent-stone-900" />
+              <span className="text-sm text-stone-700">¿Fue un favor para alguien del hogar?</span>
+            </label>
+
+            {viajeForm.es_favor && (
+              miembros.length === 0 ? (
+                <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">No hay miembros del hogar. Agrega uno desde el ícono ⚙ arriba.</p>
+              ) : (
+                <Field label="¿Para quién?">
+                  <div className="grid grid-cols-2 gap-2">
+                    {miembros.map(m => (
+                      <button key={m.id} onClick={() => setViajeForm({ ...viajeForm, para_quien_id: m.id })} className="py-2.5 rounded-lg text-sm font-medium border-2 transition-all" style={{ borderColor: viajeForm.para_quien_id === m.id ? m.color : '#e7e5e4', background: viajeForm.para_quien_id === m.id ? m.color : 'white', color: viajeForm.para_quien_id === m.id ? 'white' : '#1c1917' }}>
+                        {m.nombre}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              )
+            )}
+
+            {error && <ErrorBox msg={error} />}
+            <button onClick={saveViaje} disabled={loading} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
               {loading ? 'Guardando...' : 'Guardar viaje'}
             </button>
           </div>
         </Modal>
       )}
 
-      {/* Modal Carga */}
-      {showCarga && (
-        <Modal title="Registrar carga" onClose={() => setShowCarga(false)}>
-          <div className="space-y-4">
-            <Field label="¿Quién pagó?">
-              <div className="grid grid-cols-3 gap-2">
-                {conductores.map(c => (
-                  <button key={c.id} onClick={() => setCargaForm({ ...cargaForm, quien_pago_id: c.id })}
-                    className="py-2.5 rounded-lg text-sm font-medium border-2 transition-all"
-                    style={{
-                      borderColor: cargaForm.quien_pago_id === c.id ? c.color : '#e7e5e4',
-                      background: cargaForm.quien_pago_id === c.id ? c.color : 'white',
-                      color: cargaForm.quien_pago_id === c.id ? 'white' : '#1c1917'
-                    }}>
-                    {c.nombre}
-                  </button>
+      {/* MODAL PERSONAS */}
+      {showPersonas && (
+        <Modal title="Personas" onClose={() => { setShowPersonas(false); setError(''); setPersonaForm(initialPersona()); }}>
+          <div className="space-y-5">
+            <div>
+              <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-2">Conductores</div>
+              <div className="space-y-1.5">
+                {conductores.length === 0 ? <p className="text-xs text-stone-500 italic">Sin conductores aún.</p> : conductores.map(c => (
+                  <div key={c.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-stone-50">
+                    <div className="w-2 h-7 rounded-full" style={{ background: c.color }} />
+                    <CarIcon className="w-3.5 h-3.5 text-stone-500" />
+                    <span className="text-sm text-stone-800">{c.nombre}</span>
+                  </div>
                 ))}
               </div>
-            </Field>
-            <Field label="Monto (CLP)">
-              <input type="number" placeholder="40000" value={cargaForm.monto_clp}
-                onChange={e => setCargaForm({ ...cargaForm, monto_clp: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
-            </Field>
-            <Field label="Tipo">
-              <div className="grid grid-cols-3 gap-2">
-                {[{v:'inicio_mes',l:'Inicio mes'},{v:'dia_20',l:'Día 20'},{v:'extra',l:'Extra'}].map(t => (
-                  <button key={t.v} onClick={() => setCargaForm({ ...cargaForm, tipo: t.v })}
-                    className={`py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${cargaForm.tipo === t.v ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
-                    {t.l}
-                  </button>
-                ))}
+            </div>
+
+            {miembros.length > 0 && (
+              <div>
+                <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-2">Miembros del hogar</div>
+                <div className="space-y-1.5">
+                  {miembros.map(m => (
+                    <div key={m.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-stone-50">
+                      <div className="w-2 h-7 rounded-full" style={{ background: m.color }} />
+                      <HomeIcon className="w-3.5 h-3.5 text-stone-500" />
+                      <span className="text-sm text-stone-800">{m.nombre}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </Field>
-            <Field label="Fecha">
-              <input type="date" value={cargaForm.fecha}
-                onChange={e => setCargaForm({ ...cargaForm, fecha: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
-            </Field>
-            {error && <ErrorBox msg={error} />}
-            <button onClick={saveCarga} disabled={loading}
-              className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
-              style={{ background: '#1c1917' }}>
-              {loading ? 'Guardando...' : 'Guardar carga'}
-            </button>
+            )}
+
+            <div className="border-t border-stone-200 pt-4">
+              <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-3">Agregar persona</div>
+              <div className="space-y-3">
+                <Field label="Nombre">
+                  <input type="text" placeholder="Ej: Mamá, Hermano, Lucía..." value={personaForm.nombre} onChange={e => setPersonaForm({ ...personaForm, nombre: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+                </Field>
+                <Field label="Tipo">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setPersonaForm({ ...personaForm, tipo: 'conductor' })} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${personaForm.tipo === 'conductor' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
+                      <CarIcon className="w-3.5 h-3.5" />Conductor
+                    </button>
+                    <button onClick={() => setPersonaForm({ ...personaForm, tipo: 'miembro_hogar' })} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${personaForm.tipo === 'miembro_hogar' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
+                      <HomeIcon className="w-3.5 h-3.5" />Hogar
+                    </button>
+                  </div>
+                </Field>
+                <Field label="Color (opcional)">
+                  <div className="flex gap-2 flex-wrap">
+                    {COLORES_DISPONIBLES.map(c => {
+                      const usado = personas.some(p => p.color === c);
+                      return (
+                        <button key={c} onClick={() => setPersonaForm({ ...personaForm, color: c })} disabled={usado && personaForm.color !== c} className={`w-8 h-8 rounded-full border-2 transition-all ${usado && personaForm.color !== c ? 'opacity-25 cursor-not-allowed' : ''} ${personaForm.color === c ? 'ring-2 ring-offset-2 ring-stone-900 border-white' : 'border-white'}`} style={{ background: c }} />
+                      );
+                    })}
+                  </div>
+                </Field>
+                {error && <ErrorBox msg={error} />}
+                <button onClick={savePersona} disabled={loading || !personaForm.nombre.trim()} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
+                  {loading ? 'Guardando...' : 'Agregar persona'}
+                </button>
+              </div>
+            </div>
           </div>
         </Modal>
+      )}
+    </div>
+  );
+}
+
+// ==================== COMPONENTES AUXILIARES ====================
+function Movimientos({ viajes, cargas, personas, formatKm }) {
+  const movimientos = useMemo(() => {
+    const m = [
+      ...viajes.map(v => ({ tipo: 'viaje', id: 'v' + v.id, fecha: v.fecha, created_at: v.created_at, km: v.km_recorridos, persona_id: v.conductor_id, descripcion: v.descripcion, es_favor: v.es_favor, para_quien_id: v.para_quien_id })),
+      ...cargas.map(c => ({ tipo: 'carga', id: 'c' + c.id, fecha: c.fecha, created_at: c.created_at, km: c.km_aportados, persona_id: c.pagado_por_id, descripcion: c.tipo, autonomia_despues: c.autonomia_despues, monto_clp: c.monto_clp }))
+    ];
+    return m.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 25);
+  }, [viajes, cargas]);
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+      <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 font-semibold" style={{ fontSize: '10px' }}>Movimientos</div>
+      {movimientos.length === 0 ? (
+        <div className="px-5 py-8 text-center text-sm text-stone-500"><p>Aún sin movimientos.</p><p className="text-xs mt-1">Toca + Viaje o Cargar para empezar</p></div>
+      ) : (
+        movimientos.map((m, i) => {
+          const persona = personas.find(p => p.id === m.persona_id);
+          const paraQuien = m.para_quien_id ? personas.find(p => p.id === m.para_quien_id) : null;
+          const titulo = m.tipo === 'carga'
+            ? `Carga · ${m.descripcion?.replace('_', ' ')} · llegó a ${m.autonomia_despues} km`
+            : (m.es_favor && paraQuien ? `Favor para ${paraQuien.nombre}` : (m.descripcion || 'Viaje'));
+          return (
+            <div key={m.id} className={`px-5 py-3 flex items-center gap-3 ${i < movimientos.length - 1 ? 'border-b border-stone-100' : ''}`}>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: m.tipo === 'carga' ? '#E9C46A' : persona?.color || '#999' }}>
+                {m.tipo === 'carga' ? <PlusIcon className="w-4 h-4 text-stone-900" strokeWidth={2.5} /> : <FuelIcon className="w-4 h-4 text-white" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-stone-900 truncate">{titulo}</div>
+                <div className="text-xs text-stone-500">
+                  {persona?.nombre} · {new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                  {m.tipo === 'carga' && m.monto_clp ? ` · $${m.monto_clp.toLocaleString('es-CL')}` : ''}
+                </div>
+              </div>
+              <div className={`text-sm font-semibold ${m.tipo === 'carga' ? 'text-emerald-700' : 'text-stone-900'}`}>
+                {m.tipo === 'carga' ? '+' : '−'}{formatKm(m.km)}
+              </div>
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -515,9 +737,7 @@ function Modal({ title, children, onClose }) {
       <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-display" style={{ fontWeight: 600, fontSize: '1.5rem', letterSpacing: '-0.01em' }}>{title}</h2>
-          <button onClick={onClose} className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center hover:bg-stone-200 transition-colors">
-            <XIcon className="w-4 h-4" />
-          </button>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center hover:bg-stone-200 transition-colors"><XIcon className="w-4 h-4" /></button>
         </div>
         {children}
       </div>
@@ -528,7 +748,7 @@ function Modal({ title, children, onClose }) {
 function Field({ label, children }) {
   return (
     <div>
-      <label className="block font-semibold text-stone-700 mb-1.5 uppercase tracking-widest" style={{fontSize:'10px'}}>{label}</label>
+      <label className="block font-semibold text-stone-700 mb-1.5 uppercase tracking-widest" style={{ fontSize: '10px' }}>{label}</label>
       {children}
     </div>
   );
