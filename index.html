@@ -77,12 +77,13 @@ function BencinaApp() {
   // Formularios
   const today = () => new Date().toISOString().slice(0, 10);
   const initialCarga = () => ({ fecha: today(), tipo: 'inicio_mes', pagado_por_id: '', autonomia_despues: '', monto_clp: '', litros: '' });
-  const initialViaje = () => ({ fecha: today(), conductor_id: '', km_recorridos: '', es_favor: false, para_quien_id: '', descripcion: '' });
+  const initialViaje = () => ({ fecha: today(), conductor_id: '', km_recorridos: '', es_favor: false, para_quien_id: '', descripcion: '', acompanantes_ids: [] });
   const initialPersona = () => ({ nombre: '', tipo: 'miembro_hogar', color: '' });
   const [cargaForm, setCargaForm] = useState(initialCarga());
   const [viajeForm, setViajeForm] = useState(initialViaje());
   const [personaForm, setPersonaForm] = useState(initialPersona());
   const [showCargaDetalles, setShowCargaDetalles] = useState(false);
+  const [mostrarAcompanantes, setMostrarAcompanantes] = useState(false);
 
   // ==================== TOAST ====================
   const showToast = (msg, type = 'success') => {
@@ -174,9 +175,17 @@ function BencinaApp() {
         })
         .reduce((s, carga) => s + carga.km_aportados / N, 0);
       // Consumo propio: viajes que NO son favores (gasto personal del conductor)
+      // Si el viaje tiene acompañantes, los km se dividen entre conductor + acompañantes
       const consumo_propio = viajes
-        .filter(v => v.conductor_id === c.id && v.fecha.startsWith(currentMonth) && !v.es_favor)
-        .reduce((s, v) => s + v.km_recorridos, 0);
+        .filter(v => v.fecha.startsWith(currentMonth) && !v.es_favor)
+        .reduce((sum, v) => {
+          const acomp = v.acompanantes_ids || [];
+          const involucrados = [v.conductor_id, ...acomp];
+          if (involucrados.includes(c.id)) {
+            return sum + v.km_recorridos / involucrados.length;
+          }
+          return sum;
+        }, 0);
       // Consumo compartido: 1/N de TODOS los favores del mes (sin importar quién los manejó)
       const consumo_favor_compartido = viajes
         .filter(v => v.es_favor && v.fecha.startsWith(currentMonth))
@@ -186,7 +195,7 @@ function BencinaApp() {
         ...c,
         aporte_propio,
         aporte_recibido: Math.round(aporte_recibido),
-        consumo_propio,
+        consumo_propio: Math.round(consumo_propio),
         consumo_favor_compartido: Math.round(consumo_favor_compartido),
         consumo: Math.round(consumo),
         balance: Math.round((aporte_propio + aporte_recibido) - consumo)
@@ -267,11 +276,13 @@ function BencinaApp() {
           km_recorridos: parseInt(viajeForm.km_recorridos),
           es_favor: viajeForm.es_favor,
           para_quien_id: viajeForm.es_favor ? parseInt(viajeForm.para_quien_id) : null,
-          descripcion: viajeForm.descripcion || null
+          descripcion: viajeForm.descripcion || null,
+          acompanantes_ids: viajeForm.es_favor ? [] : viajeForm.acompanantes_ids
         })
       });
       setShowViaje(false);
       setViajeForm(initialViaje());
+      setMostrarAcompanantes(false);
       await fetchAll();
       const km = parseInt(viajeForm.km_recorridos);
       if (viajeForm.es_favor) {
@@ -279,6 +290,10 @@ function BencinaApp() {
         const perConductor = N > 0 ? Math.round(km / N) : 0;
         const paraQuien = personas.find(p => p.id === parseInt(viajeForm.para_quien_id));
         showToast(`Favor de ${formatKm(km)} a ${paraQuien?.nombre}. Se reparte entre los ${N} conductores: ${formatKm(perConductor)} cada uno`);
+      } else if (viajeForm.acompanantes_ids.length > 0) {
+        const total = 1 + viajeForm.acompanantes_ids.length;
+        const perPersona = Math.round(km / total);
+        showToast(`Viaje de ${formatKm(km)} compartido entre ${total} conductores: ${formatKm(perPersona)} cada uno`);
       } else {
         showToast(`Viaje de ${formatKm(km)} registrado`);
       }
@@ -579,7 +594,7 @@ function BencinaApp() {
 
       {/* MODAL VIAJE */}
       {showViaje && (
-        <Modal title="Registrar viaje" onClose={() => setShowViaje(false)}>
+        <Modal title="Registrar viaje" onClose={() => { setShowViaje(false); setMostrarAcompanantes(false); }}>
           <div className="space-y-4">
             <Field label="Conductor">
               {conductores.length === 0 ? (
@@ -607,17 +622,35 @@ function BencinaApp() {
               <input type="text" placeholder="Ida al supermercado" value={viajeForm.descripcion} onChange={e => setViajeForm({ ...viajeForm, descripcion: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
             </Field>
 
+            {/* Toggle: favor */}
             <label className="flex items-center gap-2.5 cursor-pointer py-1">
-              <input type="checkbox" checked={viajeForm.es_favor} onChange={e => setViajeForm({ ...viajeForm, es_favor: e.target.checked })} className="w-4 h-4 accent-stone-900" />
-              <span className="text-sm text-stone-700">¿Fue un favor para alguien del hogar?</span>
+              <input type="checkbox" checked={viajeForm.es_favor}
+                disabled={mostrarAcompanantes}
+                onChange={e => setViajeForm({ ...viajeForm, es_favor: e.target.checked, acompanantes_ids: [] })}
+                className="w-4 h-4 accent-stone-900 disabled:opacity-40" />
+              <span className={`text-sm ${mostrarAcompanantes ? 'text-stone-400' : 'text-stone-700'}`}>¿Fue un favor para alguien del hogar?</span>
             </label>
 
+            {/* Toggle: acompañantes */}
+            <label className="flex items-center gap-2.5 cursor-pointer py-1">
+              <input type="checkbox" checked={mostrarAcompanantes}
+                disabled={viajeForm.es_favor}
+                onChange={e => {
+                  setMostrarAcompanantes(e.target.checked);
+                  if (!e.target.checked) setViajeForm({ ...viajeForm, acompanantes_ids: [] });
+                }}
+                className="w-4 h-4 accent-stone-900 disabled:opacity-40" />
+              <span className={`text-sm ${viajeForm.es_favor ? 'text-stone-400' : 'text-stone-700'}`}>¿Iba acompañado por otro conductor?</span>
+            </label>
+
+            {/* Pista visual: favor */}
             {viajeForm.es_favor && viajeForm.km_recorridos && conductores.length > 0 && (
               <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900">
                 Los <span className="font-medium">{formatKm(parseInt(viajeForm.km_recorridos))}</span> de este favor se repartirán entre los {conductores.length} conductores: <span className="font-medium">{formatKm(Math.round(parseInt(viajeForm.km_recorridos) / conductores.length))}</span> cada uno
               </div>
             )}
 
+            {/* Selector: para quién (favor) */}
             {viajeForm.es_favor && (
               miembros.length === 0 ? (
                 <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">No hay miembros del hogar. Agrega uno desde el ícono ⚙ arriba.</p>
@@ -633,6 +666,43 @@ function BencinaApp() {
                 </Field>
               )
             )}
+
+            {/* Selector: acompañantes */}
+            {mostrarAcompanantes && !viajeForm.es_favor && (() => {
+              const otrosConductores = conductores.filter(c => c.id !== parseInt(viajeForm.conductor_id));
+              if (!viajeForm.conductor_id) {
+                return <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">Selecciona primero al conductor principal.</p>;
+              }
+              if (otrosConductores.length === 0) {
+                return <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">No hay otros conductores para acompañar.</p>;
+              }
+              return (
+                <>
+                  <Field label="¿Quién más iba?">
+                    <div className="grid grid-cols-2 gap-2">
+                      {otrosConductores.map(c => {
+                        const seleccionado = viajeForm.acompanantes_ids.includes(c.id);
+                        return (
+                          <button key={c.id} onClick={() => {
+                            const nuevos = seleccionado
+                              ? viajeForm.acompanantes_ids.filter(id => id !== c.id)
+                              : [...viajeForm.acompanantes_ids, c.id];
+                            setViajeForm({ ...viajeForm, acompanantes_ids: nuevos });
+                          }} className="py-2.5 rounded-lg text-sm font-medium border-2 transition-all" style={{ borderColor: seleccionado ? c.color : '#e7e5e4', background: seleccionado ? c.color : 'white', color: seleccionado ? 'white' : '#1c1917' }}>
+                            {c.nombre}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
+                  {viajeForm.acompanantes_ids.length > 0 && viajeForm.km_recorridos && (
+                    <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900">
+                      Los <span className="font-medium">{formatKm(parseInt(viajeForm.km_recorridos))}</span> se repartirán entre {1 + viajeForm.acompanantes_ids.length} conductores: <span className="font-medium">{formatKm(Math.round(parseInt(viajeForm.km_recorridos) / (1 + viajeForm.acompanantes_ids.length)))}</span> cada uno
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             {error && <ErrorBox msg={error} />}
             <button onClick={saveViaje} disabled={loading} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
@@ -717,7 +787,7 @@ function BencinaApp() {
 function Movimientos({ viajes, cargas, personas, formatKm }) {
   const movimientos = useMemo(() => {
     const m = [
-      ...viajes.map(v => ({ tipo: 'viaje', id: 'v' + v.id, fecha: v.fecha, created_at: v.created_at, km: v.km_recorridos, persona_id: v.conductor_id, descripcion: v.descripcion, es_favor: v.es_favor, para_quien_id: v.para_quien_id })),
+      ...viajes.map(v => ({ tipo: 'viaje', id: 'v' + v.id, fecha: v.fecha, created_at: v.created_at, km: v.km_recorridos, persona_id: v.conductor_id, descripcion: v.descripcion, es_favor: v.es_favor, para_quien_id: v.para_quien_id, acompanantes_ids: v.acompanantes_ids || [] })),
       ...cargas.map(c => ({ tipo: 'carga', id: 'c' + c.id, fecha: c.fecha, created_at: c.created_at, km: c.km_aportados, persona_id: c.pagado_por_id, descripcion: c.tipo, autonomia_despues: c.autonomia_despues, monto_clp: c.monto_clp }))
     ];
     return m.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 25);
@@ -743,7 +813,11 @@ function Movimientos({ viajes, cargas, personas, formatKm }) {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-stone-900 truncate">{titulo}</div>
                 <div className="text-xs text-stone-500">
-                  {persona?.nombre} · {new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                  {persona?.nombre}
+                  {m.acompanantes_ids && m.acompanantes_ids.length > 0 && (
+                    <span> + {m.acompanantes_ids.map(id => personas.find(p => p.id === id)?.nombre).filter(Boolean).join(', ')}</span>
+                  )}
+                  {' · '}{new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
                   {m.tipo === 'carga' && m.monto_clp ? ` · $${m.monto_clp.toLocaleString('es-CL')}` : ''}
                 </div>
               </div>
