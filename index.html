@@ -173,14 +173,22 @@ function BencinaApp() {
           return persona?.tipo === 'miembro_hogar';
         })
         .reduce((s, carga) => s + carga.km_aportados / N, 0);
-      const consumo = viajes
-        .filter(v => v.conductor_id === c.id && v.fecha.startsWith(currentMonth))
+      // Consumo propio: viajes que NO son favores (gasto personal del conductor)
+      const consumo_propio = viajes
+        .filter(v => v.conductor_id === c.id && v.fecha.startsWith(currentMonth) && !v.es_favor)
         .reduce((s, v) => s + v.km_recorridos, 0);
+      // Consumo compartido: 1/N de TODOS los favores del mes (sin importar quién los manejó)
+      const consumo_favor_compartido = viajes
+        .filter(v => v.es_favor && v.fecha.startsWith(currentMonth))
+        .reduce((s, v) => s + v.km_recorridos / N, 0);
+      const consumo = consumo_propio + consumo_favor_compartido;
       return {
         ...c,
         aporte_propio,
         aporte_recibido: Math.round(aporte_recibido),
-        consumo,
+        consumo_propio,
+        consumo_favor_compartido: Math.round(consumo_favor_compartido),
+        consumo: Math.round(consumo),
         balance: Math.round((aporte_propio + aporte_recibido) - consumo)
       };
     });
@@ -265,7 +273,15 @@ function BencinaApp() {
       setShowViaje(false);
       setViajeForm(initialViaje());
       await fetchAll();
-      showToast(`Viaje de ${formatKm(parseInt(viajeForm.km_recorridos))} registrado`);
+      const km = parseInt(viajeForm.km_recorridos);
+      if (viajeForm.es_favor) {
+        const N = conductores.length;
+        const perConductor = N > 0 ? Math.round(km / N) : 0;
+        const paraQuien = personas.find(p => p.id === parseInt(viajeForm.para_quien_id));
+        showToast(`Favor de ${formatKm(km)} a ${paraQuien?.nombre}. Se reparte entre los ${N} conductores: ${formatKm(perConductor)} cada uno`);
+      } else {
+        showToast(`Viaje de ${formatKm(km)} registrado`);
+      }
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -423,6 +439,11 @@ function BencinaApp() {
                   aportó <span className="text-stone-700 font-medium">{formatKm(c.aporte_propio)}</span>
                   {' · '}recibió <span className="text-stone-700 font-medium">{formatKm(c.aporte_recibido)}</span>
                   {' · '}consumió <span className="text-stone-700 font-medium">{formatKm(c.consumo)}</span>
+                  {c.consumo_favor_compartido > 0 && (
+                    <div className="text-stone-400 italic mt-0.5" style={{ fontSize: '11px' }}>
+                      ↳ {formatKm(c.consumo_propio)} propios + {formatKm(c.consumo_favor_compartido)} de favores compartidos
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -590,6 +611,12 @@ function BencinaApp() {
               <input type="checkbox" checked={viajeForm.es_favor} onChange={e => setViajeForm({ ...viajeForm, es_favor: e.target.checked })} className="w-4 h-4 accent-stone-900" />
               <span className="text-sm text-stone-700">¿Fue un favor para alguien del hogar?</span>
             </label>
+
+            {viajeForm.es_favor && viajeForm.km_recorridos && conductores.length > 0 && (
+              <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900">
+                Los <span className="font-medium">{formatKm(parseInt(viajeForm.km_recorridos))}</span> de este favor se repartirán entre los {conductores.length} conductores: <span className="font-medium">{formatKm(Math.round(parseInt(viajeForm.km_recorridos) / conductores.length))}</span> cada uno
+              </div>
+            )}
 
             {viajeForm.es_favor && (
               miembros.length === 0 ? (
