@@ -42,8 +42,8 @@ const { useState, useMemo, useEffect } = React;
 // ║  CONFIGURACIÓN — REEMPLAZA CON TUS CREDENCIALES SUPABASE   ║
 // ║  (las encuentras en Supabase → Settings → API)             ║
 // ╚════════════════════════════════════════════════════════════╝
-const SUPABASE_URL = 'https://ycccszqhoabxrdeqxfkb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljY2NzenFob2FieHJkZXF4ZmtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMjQxMjcsImV4cCI6MjA5MjgwMDEyN30.f2NaJUntFU9GxSphXqQmnh6PwkAKU3q5ASaSMRXGnuQ';
+const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
+const SUPABASE_ANON_KEY = 'TU_ANON_KEY_AQUI';
 // ╚════════════════════════════════════════════════════════════╝
 
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -318,24 +318,16 @@ function UnirseGarageScreen({ onJoined, onBack }) {
     if (!code.trim()) { setError('Ingresa el código'); return; }
     setLoading(true); setError('');
     try {
-      // Buscar el garage. Como no estamos en él, RLS no nos deja directamente.
-      // Usamos una función RPC implícita: intentamos unirnos al traer info via función.
-      // Para simplificar, llamamos a una función que retorna info sin reclamar.
-      // Alternativa: usar una policy especial. Por ahora, intentamos directamente.
-      const { data: gData, error: gErr } = await supa.from('garages').select('id, nombre, invite_code').eq('invite_code', code.trim().toUpperCase()).maybeSingle();
-      // Si RLS bloquea, gData será null aunque exista. En ese caso, hacemos la llamada de "unirse" directamente sin reclamar persona.
-      if (gErr || !gData) {
-        // Fallback: avanzar al paso de elección y dejar que la RPC valide
-        setGarage({ id: null, invite_code: code.trim().toUpperCase(), nombre: '...' });
-        setPersonasDisponibles([]);
-        setStep('elegir');
-      } else {
-        setGarage(gData);
-        const { data: ps } = await supa.from('personas').select('*').eq('garage_id', gData.id).is('user_id', null).order('id');
-        setPersonasDisponibles(ps || []);
-        setStep('elegir');
-      }
-    } catch (e) { setError(e.message); }
+      const { data, error: err } = await supa.rpc('info_garage_por_codigo', {
+        p_invite_code: code.trim().toUpperCase()
+      });
+      if (err) throw err;
+      setGarage(data.garage);
+      setPersonasDisponibles(data.personas_disponibles || []);
+      setStep('elegir');
+    } catch (e) {
+      setError(e.message?.includes('Código inválido') ? 'Código inválido' : (e.message || 'Error al validar el código'));
+    }
     finally { setLoading(false); }
   };
 
