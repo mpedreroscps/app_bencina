@@ -23,10 +23,7 @@
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   input[type="number"] { -moz-appearance: textfield; }
-  @keyframes slideDown {
-    from { transform: translateY(-100%); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
+  @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   .animate-slideDown { animation: slideDown 0.3s ease-out; }
 </style>
 </head>
@@ -36,9 +33,20 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
 <script type="text/babel">
-const { useState, useMemo } = React;
+const { useState, useMemo, useEffect } = React;
+
+// ╔════════════════════════════════════════════════════════════╗
+// ║  CONFIGURACIÓN — REEMPLAZA CON TUS CREDENCIALES SUPABASE   ║
+// ║  (las encuentras en Supabase → Settings → API)             ║
+// ╚════════════════════════════════════════════════════════════╝
+const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
+const SUPABASE_ANON_KEY = 'TU_ANON_KEY_AQUI';
+// ╚════════════════════════════════════════════════════════════╝
+
+const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ==================== ICONOS ====================
 const Icon = ({ children, className = "w-4 h-4", strokeWidth = 2 }) => (
@@ -56,36 +64,401 @@ const HomeIcon = (p) => <Icon {...p}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 
 const CarIcon = (p) => <Icon {...p}><path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></Icon>;
 const EyeIcon = (p) => <Icon {...p}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></Icon>;
 const EyeOffIcon = (p) => <Icon {...p}><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></Icon>;
+const EditIcon = (p) => <Icon {...p}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></Icon>;
+const LogoutIcon = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></Icon>;
+const CopyIcon = (p) => <Icon {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></Icon>;
 
-// Paleta de colores para personas nuevas
-const COLORES_DISPONIBLES = [
-  '#E76F51', '#52796F', '#3D5A80', '#E9C46A', '#9D4EDD',
-  '#F4A261', '#2A9D8F', '#BC4749', '#588157', '#6A4C93', '#F77F00'
-];
+const COLORES_DISPONIBLES = ['#E76F51', '#52796F', '#3D5A80', '#E9C46A', '#9D4EDD', '#F4A261', '#2A9D8F', '#BC4749', '#588157', '#6A4C93', '#F77F00'];
 
-// ==================== APP ====================
+// ==================== APP ROOT ====================
 function BencinaApp() {
-  // Configuración de conexión
-  const [config, setConfig] = useState({ url: '', key: '' });
-  const [connected, setConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
+  const [session, setSession] = useState(null);
+  const [miPersona, setMiPersona] = useState(null);
+  const [loadingSession, setLoadingSession] = useState(true);
 
-  // Datos desde Supabase
+  // Bootstrap: detectar sesión guardada y suscribirse a cambios
+  useEffect(() => {
+    supa.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setLoadingSession(false);
+    });
+    const { data: { subscription } } = supa.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (!newSession) setMiPersona(null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Cuando hay sesión, buscar la persona del usuario
+  useEffect(() => {
+    if (!session) { setMiPersona(null); return; }
+    (async () => {
+      const { data, error } = await supa
+        .from('personas')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if (!error && data) setMiPersona(data);
+      else setMiPersona(null);
+    })();
+  }, [session]);
+
+  // ¿Configuración válida?
+  if (SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_ANON_KEY.includes('TU_ANON_KEY')) {
+    return <ConfigErrorScreen />;
+  }
+
+  if (loadingSession) {
+    return <div className="min-h-screen flex items-center justify-center font-body text-stone-500 text-sm" style={{ background: '#FAF7F0' }}>Cargando...</div>;
+  }
+
+  if (!session) return <AuthScreen />;
+  if (!miPersona) return <OnboardingScreen onJoined={(p) => setMiPersona(p)} />;
+  return <MainApp session={session} miPersona={miPersona} onLogout={() => supa.auth.signOut()} />;
+}
+
+// ==================== ERROR DE CONFIG ====================
+function ConfigErrorScreen() {
+  return (
+    <div className="min-h-screen w-full font-body flex items-center justify-center px-6" style={{ background: '#FAF7F0' }}>
+      <div className="max-w-md bg-white rounded-2xl p-6 border-2 border-red-300">
+        <div className="flex items-start gap-3 mb-3">
+          <AlertIcon className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h2 className="font-display text-xl font-semibold text-red-700">Configuración faltante</h2>
+            <p className="text-sm text-stone-600 mt-1">El código tiene placeholders. Edita el <code className="bg-stone-100 px-1 rounded">index.html</code> y reemplaza las constantes <code className="bg-stone-100 px-1 rounded">SUPABASE_URL</code> y <code className="bg-stone-100 px-1 rounded">SUPABASE_ANON_KEY</code> con tus credenciales reales (las encuentras en Supabase → Settings → API).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== LOGIN / SIGNUP ====================
+function AuthScreen() {
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+
+  const submit = async () => {
+    if (!email || !password) { setError('Completa email y contraseña'); return; }
+    if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return; }
+    setLoading(true); setError(''); setInfo('');
+    try {
+      if (mode === 'login') {
+        const { error } = await supa.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { data, error } = await supa.auth.signUp({ email, password });
+        if (error) throw error;
+        if (!data.session) setInfo('Revisa tu email para confirmar tu cuenta');
+      }
+    } catch (e) {
+      setError(e.message || 'Error al autenticar');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="min-h-screen w-full font-body" style={{ background: '#FAF7F0' }}>
+      <div className="max-w-md mx-auto px-6 pt-16 pb-12">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 shadow-sm" style={{ background: '#E76F51' }}>
+            <FuelIcon className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="font-display" style={{ fontWeight: 600, fontSize: '2.5rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
+            Bencina<br /><span className="italic" style={{ color: '#E76F51' }}>Compartida</span>
+          </h1>
+        </div>
+
+        <div className="flex bg-stone-100 rounded-xl p-1 mb-5">
+          <button onClick={() => { setMode('login'); setError(''); setInfo(''); }} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${mode === 'login' ? 'bg-white shadow-sm' : 'text-stone-600'}`}>Iniciar sesión</button>
+          <button onClick={() => { setMode('signup'); setError(''); setInfo(''); }} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${mode === 'signup' ? 'bg-white shadow-sm' : 'text-stone-600'}`}>Crear cuenta</button>
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1.5 uppercase tracking-widest">Email</label>
+            <input type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-body" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1.5 uppercase tracking-widest">Contraseña</label>
+            <div className="relative">
+              <input type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-4 py-2.5 pr-11 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-body" onKeyDown={e => e.key === 'Enter' && submit()} />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-stone-500 hover:text-stone-800">
+                {showPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
+            {mode === 'signup' && <p className="text-xs text-stone-500 mt-1">Mínimo 6 caracteres</p>}
+          </div>
+          {error && <ErrorBox msg={error} />}
+          {info && <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-3">{info}</div>}
+          <button onClick={submit} disabled={loading || !email || !password} className="w-full py-3 rounded-lg text-white font-medium text-sm transition-all disabled:opacity-40 hover:opacity-90" style={{ background: '#1c1917' }}>
+            {loading ? 'Cargando...' : (mode === 'login' ? 'Iniciar sesión →' : 'Crear cuenta →')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== ONBOARDING ====================
+function OnboardingScreen({ onJoined }) {
+  const [mode, setMode] = useState(null);
+
+  if (mode === 'crear') return <CrearGarageScreen onCreated={onJoined} onBack={() => setMode(null)} />;
+  if (mode === 'unirse') return <UnirseGarageScreen onJoined={onJoined} onBack={() => setMode(null)} />;
+
+  return (
+    <div className="min-h-screen w-full font-body" style={{ background: '#FAF7F0' }}>
+      <div className="max-w-md mx-auto px-6 pt-16 pb-12">
+        <div className="text-center mb-10">
+          <h1 className="font-display" style={{ fontWeight: 600, fontSize: '2rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
+            ¡Bienvenido/a!
+          </h1>
+          <p className="text-stone-600 text-sm mt-3">¿Qué quieres hacer?</p>
+        </div>
+        <div className="space-y-3">
+          <button onClick={() => setMode('crear')} className="w-full bg-white rounded-2xl p-5 text-left border border-stone-200 hover:border-stone-400 transition-colors">
+            <div className="font-display text-lg font-semibold mb-1">Crear un garage</div>
+            <p className="text-sm text-stone-600">Empieza desde cero con tu grupo. Recibirás un código para invitar a los demás.</p>
+          </button>
+          <button onClick={() => setMode('unirse')} className="w-full bg-white rounded-2xl p-5 text-left border border-stone-200 hover:border-stone-400 transition-colors">
+            <div className="font-display text-lg font-semibold mb-1">Unirme con código</div>
+            <p className="text-sm text-stone-600">Tengo un código de invitación de alguien que ya creó un garage.</p>
+          </button>
+          <button onClick={() => supa.auth.signOut()} className="w-full text-center text-sm text-stone-500 hover:text-stone-800 mt-6 py-2">
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CrearGarageScreen({ onCreated, onBack }) {
+  const [nombreGarage, setNombreGarage] = useState('');
+  const [miNombre, setMiNombre] = useState('');
+  const [tipo, setTipo] = useState('conductor');
+  const [color, setColor] = useState('#E76F51');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    if (!nombreGarage.trim() || !miNombre.trim()) { setError('Completa todos los campos'); return; }
+    setLoading(true); setError('');
+    try {
+      const { data, error } = await supa.rpc('crear_garage', {
+        p_nombre_garage: nombreGarage.trim(),
+        p_mi_nombre: miNombre.trim(),
+        p_mi_color: color,
+        p_mi_tipo: tipo
+      });
+      if (error) throw error;
+      const { data: persona } = await supa.from('personas').select('*').eq('id', data.persona_id).single();
+      onCreated(persona);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="min-h-screen w-full font-body" style={{ background: '#FAF7F0' }}>
+      <div className="max-w-md mx-auto px-6 pt-16 pb-12">
+        <button onClick={onBack} className="text-sm text-stone-600 mb-6">← Volver</button>
+        <h1 className="font-display mb-6" style={{ fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.02em' }}>Crear garage</h1>
+        <div className="bg-white rounded-2xl p-6 border border-stone-200 space-y-4">
+          <Field label="Nombre del garage">
+            <input type="text" placeholder="Ej: Casa, Familia, etc." value={nombreGarage} onChange={e => setNombreGarage(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+          </Field>
+          <Field label="Tu nombre en el garage">
+            <input type="text" placeholder="Ej: Jesu" value={miNombre} onChange={e => setMiNombre(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+          </Field>
+          <Field label="Tipo">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setTipo('conductor')} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${tipo === 'conductor' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
+                <CarIcon className="w-3.5 h-3.5" />Conductor
+              </button>
+              <button onClick={() => setTipo('miembro_hogar')} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${tipo === 'miembro_hogar' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
+                <HomeIcon className="w-3.5 h-3.5" />Hogar
+              </button>
+            </div>
+          </Field>
+          <Field label="Tu color">
+            <div className="flex gap-2 flex-wrap">
+              {COLORES_DISPONIBLES.map(c => (
+                <button key={c} onClick={() => setColor(c)} className={`w-8 h-8 rounded-full border-2 ${color === c ? 'ring-2 ring-offset-2 ring-stone-900 border-white' : 'border-white'}`} style={{ background: c }} />
+              ))}
+            </div>
+          </Field>
+          {error && <ErrorBox msg={error} />}
+          <button onClick={submit} disabled={loading} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90" style={{ background: '#1c1917' }}>
+            {loading ? 'Creando...' : 'Crear garage →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnirseGarageScreen({ onJoined, onBack }) {
+  const [step, setStep] = useState('codigo');
+  const [code, setCode] = useState('');
+  const [garage, setGarage] = useState(null);
+  const [personasDisponibles, setPersonasDisponibles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [reclamarId, setReclamarId] = useState(null);
+  const [nuevaForm, setNuevaForm] = useState({ nombre: '', tipo: 'conductor', color: '#E76F51' });
+  const [creandoNueva, setCreandoNueva] = useState(false);
+
+  const validarCodigo = async () => {
+    if (!code.trim()) { setError('Ingresa el código'); return; }
+    setLoading(true); setError('');
+    try {
+      // Buscar el garage. Como no estamos en él, RLS no nos deja directamente.
+      // Usamos una función RPC implícita: intentamos unirnos al traer info via función.
+      // Para simplificar, llamamos a una función que retorna info sin reclamar.
+      // Alternativa: usar una policy especial. Por ahora, intentamos directamente.
+      const { data: gData, error: gErr } = await supa.from('garages').select('id, nombre, invite_code').eq('invite_code', code.trim().toUpperCase()).maybeSingle();
+      // Si RLS bloquea, gData será null aunque exista. En ese caso, hacemos la llamada de "unirse" directamente sin reclamar persona.
+      if (gErr || !gData) {
+        // Fallback: avanzar al paso de elección y dejar que la RPC valide
+        setGarage({ id: null, invite_code: code.trim().toUpperCase(), nombre: '...' });
+        setPersonasDisponibles([]);
+        setStep('elegir');
+      } else {
+        setGarage(gData);
+        const { data: ps } = await supa.from('personas').select('*').eq('garage_id', gData.id).is('user_id', null).order('id');
+        setPersonasDisponibles(ps || []);
+        setStep('elegir');
+      }
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const unirme = async (personaId = null) => {
+    setLoading(true); setError('');
+    try {
+      const params = personaId
+        ? { p_invite_code: code.trim().toUpperCase(), p_persona_id: personaId }
+        : { p_invite_code: code.trim().toUpperCase(), p_nombre: nuevaForm.nombre.trim(), p_color: nuevaForm.color, p_tipo: nuevaForm.tipo };
+      const { data, error } = await supa.rpc('unirse_a_garage', params);
+      if (error) throw error;
+      const { data: persona } = await supa.from('personas').select('*').eq('id', data.persona_id).single();
+      onJoined(persona);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  if (step === 'codigo') {
+    return (
+      <div className="min-h-screen w-full font-body" style={{ background: '#FAF7F0' }}>
+        <div className="max-w-md mx-auto px-6 pt-16 pb-12">
+          <button onClick={onBack} className="text-sm text-stone-600 mb-6">← Volver</button>
+          <h1 className="font-display mb-6" style={{ fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.02em' }}>Unirme con código</h1>
+          <div className="bg-white rounded-2xl p-6 border border-stone-200 space-y-4">
+            <Field label="Código de invitación">
+              <input type="text" placeholder="Ej: ABC12345" value={code} onChange={e => setCode(e.target.value.toUpperCase())} className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-display text-xl font-semibold text-center tracking-widest" />
+            </Field>
+            {error && <ErrorBox msg={error} />}
+            <button onClick={validarCodigo} disabled={loading || !code.trim()} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90" style={{ background: '#1c1917' }}>
+              {loading ? 'Verificando...' : 'Continuar →'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Step: elegir
+  return (
+    <div className="min-h-screen w-full font-body" style={{ background: '#FAF7F0' }}>
+      <div className="max-w-md mx-auto px-6 pt-16 pb-12">
+        <button onClick={() => setStep('codigo')} className="text-sm text-stone-600 mb-6">← Volver</button>
+        <h1 className="font-display mb-2" style={{ fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.02em' }}>¿Quién eres?</h1>
+        {garage?.nombre && garage.nombre !== '...' && <p className="text-sm text-stone-600 mb-6">En el garage <span className="font-medium">{garage.nombre}</span></p>}
+
+        {!creandoNueva ? (
+          <div className="space-y-3">
+            {personasDisponibles.length > 0 && (
+              <>
+                <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold">Reclamar persona existente</div>
+                {personasDisponibles.map(p => (
+                  <button key={p.id} onClick={() => unirme(p.id)} disabled={loading} className="w-full bg-white rounded-xl p-4 text-left border border-stone-200 hover:border-stone-400 flex items-center gap-3 disabled:opacity-50">
+                    <div className="w-2 h-9 rounded-full" style={{ background: p.color }} />
+                    <div className="flex-1">
+                      <div className="font-medium">{p.nombre}</div>
+                      <div className="text-xs text-stone-500">{p.tipo === 'conductor' ? 'Conductor' : 'Hogar'}</div>
+                    </div>
+                    {p.tipo === 'conductor' ? <CarIcon className="w-4 h-4 text-stone-400" /> : <HomeIcon className="w-4 h-4 text-stone-400" />}
+                  </button>
+                ))}
+                <div className="text-center text-xs text-stone-400 my-3">— o —</div>
+              </>
+            )}
+            <button onClick={() => setCreandoNueva(true)} className="w-full bg-white rounded-xl p-4 text-center border-2 border-dashed border-stone-300 hover:border-stone-500">
+              + Soy una persona nueva
+            </button>
+            {error && <ErrorBox msg={error} />}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl p-6 border border-stone-200 space-y-4">
+            <button onClick={() => setCreandoNueva(false)} className="text-xs text-stone-500 mb-2">← Elegir persona existente</button>
+            <Field label="Tu nombre">
+              <input type="text" placeholder="Ej: Jesu" value={nuevaForm.nombre} onChange={e => setNuevaForm({ ...nuevaForm, nombre: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+            </Field>
+            <Field label="Tipo">
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setNuevaForm({ ...nuevaForm, tipo: 'conductor' })} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${nuevaForm.tipo === 'conductor' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
+                  <CarIcon className="w-3.5 h-3.5" />Conductor
+                </button>
+                <button onClick={() => setNuevaForm({ ...nuevaForm, tipo: 'miembro_hogar' })} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${nuevaForm.tipo === 'miembro_hogar' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
+                  <HomeIcon className="w-3.5 h-3.5" />Hogar
+                </button>
+              </div>
+            </Field>
+            <Field label="Color">
+              <div className="flex gap-2 flex-wrap">
+                {COLORES_DISPONIBLES.map(c => (
+                  <button key={c} onClick={() => setNuevaForm({ ...nuevaForm, color: c })} className={`w-8 h-8 rounded-full border-2 ${nuevaForm.color === c ? 'ring-2 ring-offset-2 ring-stone-900 border-white' : 'border-white'}`} style={{ background: c }} />
+                ))}
+              </div>
+            </Field>
+            {error && <ErrorBox msg={error} />}
+            <button onClick={() => unirme(null)} disabled={loading || !nuevaForm.nombre.trim()} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90" style={{ background: '#1c1917' }}>
+              {loading ? 'Uniéndome...' : 'Unirme al garage →'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==================== MAIN APP ====================
+function MainApp({ session, miPersona, onLogout }) {
+  const garageId = miPersona.garage_id;
+  const [garage, setGarage] = useState(null);
   const [personas, setPersonas] = useState([]);
   const [viajes, setViajes] = useState([]);
   const [cargas, setCargas] = useState([]);
   const [configuracion, setConfiguracion] = useState({ rendimiento_km_litro: null });
 
-  // Estado de UI
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
   const [showViaje, setShowViaje] = useState(false);
   const [showCarga, setShowCarga] = useState(false);
   const [showPersonas, setShowPersonas] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [showCargaDetalles, setShowCargaDetalles] = useState(false);
+  const [mostrarAcompanantes, setMostrarAcompanantes] = useState(false);
+  const [confirmandoReset, setConfirmandoReset] = useState(false);
+  const [editingViaje, setEditingViaje] = useState(null);
+  const [editingCarga, setEditingCarga] = useState(null);
 
-  // Formularios
   const today = () => new Date().toISOString().slice(0, 10);
   const initialCarga = () => ({ fecha: today(), tipo: 'inicio_mes', pagado_por_id: '', autonomia_despues: '', litros: '', monto_clp: '' });
   const initialViaje = () => ({ fecha: today(), conductor_id: '', km_recorridos: '', es_favor: false, para_quien_id: '', descripcion: '', acompanantes_ids: [] });
@@ -93,260 +466,244 @@ function BencinaApp() {
   const [cargaForm, setCargaForm] = useState(initialCarga());
   const [viajeForm, setViajeForm] = useState(initialViaje());
   const [personaForm, setPersonaForm] = useState(initialPersona());
-  const [showCargaDetalles, setShowCargaDetalles] = useState(false);
-  const [mostrarAcompanantes, setMostrarAcompanantes] = useState(false);
-  const [confirmandoReset, setConfirmandoReset] = useState(false);
 
-  // ==================== TOAST ====================
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 5000);
   };
 
-  // ==================== SUPABASE ====================
-  const supaFetch = async (path, options = {}) => {
-    const baseUrl = config.url.replace(/\/$/, '').trim();
-    const key = config.key.trim();
-    const res = await fetch(`${baseUrl}/rest/v1/${path}`, {
-      ...options,
-      headers: {
-        apikey: key, Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json', Prefer: 'return=representation',
-        ...(options.headers || {})
-      }
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`${res.status} — ${errText}`);
-    }
-    return res.json();
-  };
-
+  // ==================== FETCH ====================
   const fetchAll = async () => {
     setLoading(true); setError('');
     try {
-      const [p, v, cg, cfg] = await Promise.all([
-        supaFetch('personas?select=*&order=tipo,id'),
-        supaFetch('viajes?select=*&order=created_at.desc'),
-        supaFetch('cargas?select=*&order=created_at.desc'),
-        supaFetch('configuracion?select=*&limit=1')
+      const [g, p, v, c, cfg] = await Promise.all([
+        supa.from('garages').select('*').eq('id', garageId).single(),
+        supa.from('personas').select('*').eq('garage_id', garageId).order('tipo').order('id'),
+        supa.from('viajes').select('*').eq('garage_id', garageId).order('created_at', { ascending: false }),
+        supa.from('cargas').select('*').eq('garage_id', garageId).order('created_at', { ascending: false }),
+        supa.from('configuracion').select('*').eq('garage_id', garageId).maybeSingle()
       ]);
-      setPersonas(p); setViajes(v); setCargas(cg);
-      setConfiguracion(cfg[0] || { rendimiento_km_litro: null });
+      if (g.error) throw g.error;
+      if (p.error) throw p.error;
+      setGarage(g.data);
+      setPersonas(p.data || []);
+      setViajes(v.data || []);
+      setCargas(c.data || []);
+      setConfiguracion(cfg.data || { rendimiento_km_litro: null, garage_id: garageId });
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
 
-  const connect = async () => {
-    setConnecting(true); setError('');
-    try {
-      const baseUrl = config.url.replace(/\/$/, '').trim();
-      const key = config.key.trim();
-      const res = await fetch(`${baseUrl}/rest/v1/personas?select=*&limit=1`, {
-        headers: { apikey: key, Authorization: `Bearer ${key}` }
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`No se pudo conectar (${res.status}). ${errText.slice(0, 200)}`);
-      }
-      setConnected(true);
-      await fetchAll();
-    } catch (e) { setError(e.message); }
-    finally { setConnecting(false); }
-  };
+  useEffect(() => { fetchAll(); }, [garageId]);
 
-  // ==================== DATOS DERIVADOS ====================
+  // ==================== DERIVADOS ====================
   const conductores = useMemo(() => personas.filter(p => p.tipo === 'conductor'), [personas]);
   const miembros = useMemo(() => personas.filter(p => p.tipo === 'miembro_hogar'), [personas]);
   const currentMonth = new Date().toISOString().slice(0, 7);
 
-  // Nivel actual del estanque (km)
-  // = autonomía después de la última carga − km recorridos posteriores a esa carga
   const nivelActual = useMemo(() => {
     if (cargas.length === 0) return 0;
-    const ordenadas = [...cargas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const ultima = ordenadas[0];
+    const ord = [...cargas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const ultima = ord[0];
     const ultimaTime = new Date(ultima.created_at);
-    const consumido = viajes
-      .filter(v => new Date(v.created_at) > ultimaTime)
-      .reduce((s, v) => s + v.km_recorridos, 0);
-    return Math.max(0, ultima.autonomia_despues - consumido);
+    const consumido = viajes.filter(v => new Date(v.created_at) > ultimaTime).reduce((s, v) => s + Number(v.km_recorridos), 0);
+    return Math.max(0, Number(ultima.autonomia_despues) - consumido);
   }, [cargas, viajes]);
 
-  // Balance por conductor (mes actual, en km)
   const conductorBalances = useMemo(() => {
     const N = conductores.length;
     if (N === 0) return [];
     return conductores.map(c => {
       const cargasMes = cargas.filter(carga => carga.fecha.startsWith(currentMonth));
-      const aporte_propio = cargasMes
-        .filter(carga => carga.pagado_por_id === c.id)
-        .reduce((s, carga) => s + carga.km_aportados, 0);
-      const aporte_recibido = cargasMes
-        .filter(carga => {
-          const persona = personas.find(p => p.id === carga.pagado_por_id);
-          return persona?.tipo === 'miembro_hogar';
-        })
-        .reduce((s, carga) => s + carga.km_aportados / N, 0);
-      // Consumo propio: viajes que NO son favores (gasto personal del conductor)
-      // Si el viaje tiene acompañantes, los km se dividen entre conductor + acompañantes
-      const consumo_propio = viajes
-        .filter(v => v.fecha.startsWith(currentMonth) && !v.es_favor)
-        .reduce((sum, v) => {
-          const acomp = v.acompanantes_ids || [];
-          const involucrados = [v.conductor_id, ...acomp];
-          if (involucrados.includes(c.id)) {
-            return sum + v.km_recorridos / involucrados.length;
-          }
-          return sum;
-        }, 0);
-      // Consumo compartido: 1/N de TODOS los favores del mes (sin importar quién los manejó)
-      const consumo_favor_compartido = viajes
-        .filter(v => v.es_favor && v.fecha.startsWith(currentMonth))
-        .reduce((s, v) => s + v.km_recorridos / N, 0);
+      const aporte_propio = cargasMes.filter(carga => carga.pagado_por_id === c.id).reduce((s, carga) => s + Number(carga.km_aportados), 0);
+      const aporte_recibido = cargasMes.filter(carga => {
+        const p = personas.find(p => p.id === carga.pagado_por_id);
+        return p?.tipo === 'miembro_hogar';
+      }).reduce((s, carga) => s + Number(carga.km_aportados) / N, 0);
+      const consumo_propio = viajes.filter(v => v.fecha.startsWith(currentMonth) && !v.es_favor).reduce((sum, v) => {
+        const acomp = v.acompanantes_ids || [];
+        const involucrados = [v.conductor_id, ...acomp];
+        if (involucrados.includes(c.id)) return sum + Number(v.km_recorridos) / involucrados.length;
+        return sum;
+      }, 0);
+      const consumo_favor_compartido = viajes.filter(v => v.es_favor && v.fecha.startsWith(currentMonth)).reduce((s, v) => s + Number(v.km_recorridos) / N, 0);
       const consumo = consumo_propio + consumo_favor_compartido;
-      return {
-        ...c,
-        aporte_propio,
-        aporte_recibido: aporte_recibido,
-        consumo_propio: consumo_propio,
-        consumo_favor_compartido: consumo_favor_compartido,
-        consumo: consumo,
-        balance: (aporte_propio + aporte_recibido) - consumo
-      };
+      return { ...c, aporte_propio, aporte_recibido, consumo_propio, consumo_favor_compartido, consumo, balance: (aporte_propio + aporte_recibido) - consumo };
     });
   }, [conductores, personas, cargas, viajes, currentMonth]);
 
-  // Aportes de miembros del hogar (mes actual)
-  const miembroAportes = useMemo(() => miembros.map(m => {
-    const aportado = cargas
-      .filter(c => c.pagado_por_id === m.id && c.fecha.startsWith(currentMonth))
-      .reduce((s, c) => s + c.km_aportados, 0);
-    const recibido = viajes
-      .filter(v => v.es_favor && v.para_quien_id === m.id && v.fecha.startsWith(currentMonth))
-      .reduce((s, v) => s + v.km_recorridos, 0);
-    return { ...m, aportado, recibido };
-  }), [miembros, cargas, viajes, currentMonth]);
+  const miembroAportes = useMemo(() => miembros.map(m => ({
+    ...m,
+    aportado: cargas.filter(c => c.pagado_por_id === m.id && c.fecha.startsWith(currentMonth)).reduce((s, c) => s + Number(c.km_aportados), 0),
+    recibido: viajes.filter(v => v.es_favor && v.para_quien_id === m.id && v.fecha.startsWith(currentMonth)).reduce((s, v) => s + Number(v.km_recorridos), 0)
+  })), [miembros, cargas, viajes, currentMonth]);
 
-  // Próximo en cargar = balance más negativo
-  const proximo = conductorBalances.length
-    ? [...conductorBalances].sort((a, b) => a.balance - b.balance)[0]
-    : null;
+  const proximo = conductorBalances.length ? [...conductorBalances].sort((a, b) => a.balance - b.balance)[0] : null;
 
   // ==================== ACCIONES ====================
   const saveCarga = async () => {
-    const usaRendimiento = !!configuracion.rendimiento_km_litro;
+    const usaRend = !!configuracion.rendimiento_km_litro;
     if (!cargaForm.pagado_por_id) { setError('Selecciona quién pagó'); return; }
-    if (usaRendimiento && !cargaForm.litros) { setError('Ingresa los litros cargados'); return; }
-    if (!usaRendimiento && !cargaForm.autonomia_despues) { setError('Ingresa la autonomía después de cargar'); return; }
-
+    if (usaRend && !cargaForm.litros) { setError('Ingresa los litros'); return; }
+    if (!usaRend && !cargaForm.autonomia_despues) { setError('Ingresa la autonomía después de cargar'); return; }
     setLoading(true); setError('');
     try {
       let km_aportados, autonomia_despues, litros;
-      if (usaRendimiento) {
-        // Modo "litros": app calcula los km usando el rendimiento configurado
+      if (usaRend) {
         litros = parseFloat(cargaForm.litros);
-        km_aportados = litros * configuracion.rendimiento_km_litro;
-        autonomia_despues = nivelActual + km_aportados;
+        km_aportados = litros * Number(configuracion.rendimiento_km_litro);
+        autonomia_despues = (editingCarga ? Number(editingCarga.autonomia_despues) : nivelActual) + km_aportados;
+        if (editingCarga) {
+          // Recalcular: usar el nivelActual al momento original
+          const nivelAntesOriginal = Number(editingCarga.autonomia_despues) - Number(editingCarga.km_aportados);
+          autonomia_despues = nivelAntesOriginal + km_aportados;
+        }
       } else {
-        // Modo "tablero": el usuario ingresa los km manualmente
         autonomia_despues = parseFloat(cargaForm.autonomia_despues);
-        km_aportados = autonomia_despues - nivelActual;
+        if (editingCarga) {
+          const nivelAntesOriginal = Number(editingCarga.autonomia_despues) - Number(editingCarga.km_aportados);
+          km_aportados = autonomia_despues - nivelAntesOriginal;
+        } else {
+          km_aportados = autonomia_despues - nivelActual;
+        }
         litros = cargaForm.litros ? parseFloat(cargaForm.litros) : null;
       }
-      const persona = personas.find(p => p.id === parseInt(cargaForm.pagado_por_id));
-
-      await supaFetch('cargas', {
-        method: 'POST',
-        body: JSON.stringify({
-          fecha: cargaForm.fecha,
-          tipo: cargaForm.tipo,
-          pagado_por_id: parseInt(cargaForm.pagado_por_id),
-          autonomia_despues: autonomia_despues,
-          km_aportados: km_aportados,
-          monto_clp: cargaForm.monto_clp ? parseInt(cargaForm.monto_clp) : null,
-          litros: litros
-        })
-      });
-      setShowCarga(false);
-      setCargaForm(initialCarga());
-      setShowCargaDetalles(false);
-      await fetchAll();
-
-      if (persona?.tipo === 'miembro_hogar') {
-        const N = conductores.length;
-        const perConductor = N > 0 ? km_aportados / N : 0;
-        showToast(`Aportaste ${formatKm(km_aportados)}. Se repartirán entre los ${N} conductores: ${formatKm(perConductor)} cada uno`);
+      const body = {
+        fecha: cargaForm.fecha,
+        tipo: cargaForm.tipo,
+        pagado_por_id: parseInt(cargaForm.pagado_por_id),
+        autonomia_despues,
+        km_aportados,
+        monto_clp: cargaForm.monto_clp ? parseInt(cargaForm.monto_clp) : null,
+        litros
+      };
+      if (editingCarga) {
+        body.updated_at = new Date().toISOString();
+        body.updated_by_id = miPersona.id;
+        const { error } = await supa.from('cargas').update(body).eq('id', editingCarga.id);
+        if (error) throw error;
+        showToast('Carga actualizada');
       } else {
-        showToast(`Aportaste ${formatKm(km_aportados)} al pool`);
+        body.garage_id = garageId;
+        const { error } = await supa.from('cargas').insert(body);
+        if (error) throw error;
+        const persona = personas.find(p => p.id === parseInt(cargaForm.pagado_por_id));
+        if (persona?.tipo === 'miembro_hogar') {
+          const N = conductores.length;
+          const perC = N > 0 ? km_aportados / N : 0;
+          showToast(`Aportaste ${formatKm(km_aportados)}. Se reparten entre ${N} conductores: ${formatKm(perC)} cada uno`);
+        } else {
+          showToast(`Aportaste ${formatKm(km_aportados)} al pool`);
+        }
       }
+      setShowCarga(false); setCargaForm(initialCarga()); setShowCargaDetalles(false); setEditingCarga(null);
+      await fetchAll();
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
 
   const saveViaje = async () => {
-    if (!viajeForm.conductor_id || !viajeForm.km_recorridos) {
-      setError('Selecciona conductor y km recorridos'); return;
-    }
-    if (viajeForm.es_favor && !viajeForm.para_quien_id) {
-      setError('Selecciona para quién es el favor'); return;
-    }
+    if (!viajeForm.conductor_id || !viajeForm.km_recorridos) { setError('Completa conductor y km'); return; }
+    if (viajeForm.es_favor && !viajeForm.para_quien_id) { setError('Selecciona para quién es el favor'); return; }
     setLoading(true); setError('');
     try {
-      await supaFetch('viajes', {
-        method: 'POST',
-        body: JSON.stringify({
-          fecha: viajeForm.fecha,
-          conductor_id: parseInt(viajeForm.conductor_id),
-          km_recorridos: parseFloat(viajeForm.km_recorridos),
-          es_favor: viajeForm.es_favor,
-          para_quien_id: viajeForm.es_favor ? parseInt(viajeForm.para_quien_id) : null,
-          descripcion: viajeForm.descripcion || null,
-          acompanantes_ids: viajeForm.es_favor ? [] : viajeForm.acompanantes_ids
-        })
-      });
-      setShowViaje(false);
-      setViajeForm(initialViaje());
-      setMostrarAcompanantes(false);
-      await fetchAll();
-      const km = parseFloat(viajeForm.km_recorridos);
-      if (viajeForm.es_favor) {
-        const N = conductores.length;
-        const perConductor = N > 0 ? km / N : 0;
-        const paraQuien = personas.find(p => p.id === parseInt(viajeForm.para_quien_id));
-        showToast(`Favor de ${formatKm(km)} a ${paraQuien?.nombre}. Se reparte entre los ${N} conductores: ${formatKm(perConductor)} cada uno`);
-      } else if (viajeForm.acompanantes_ids.length > 0) {
-        const total = 1 + viajeForm.acompanantes_ids.length;
-        const perPersona = km / total;
-        showToast(`Viaje de ${formatKm(km)} compartido entre ${total} conductores: ${formatKm(perPersona)} cada uno`);
+      const body = {
+        fecha: viajeForm.fecha,
+        conductor_id: parseInt(viajeForm.conductor_id),
+        km_recorridos: parseFloat(viajeForm.km_recorridos),
+        es_favor: viajeForm.es_favor,
+        para_quien_id: viajeForm.es_favor ? parseInt(viajeForm.para_quien_id) : null,
+        descripcion: viajeForm.descripcion || null,
+        acompanantes_ids: viajeForm.es_favor ? [] : viajeForm.acompanantes_ids
+      };
+      if (editingViaje) {
+        body.updated_at = new Date().toISOString();
+        body.updated_by_id = miPersona.id;
+        const { error } = await supa.from('viajes').update(body).eq('id', editingViaje.id);
+        if (error) throw error;
+        showToast('Viaje actualizado');
       } else {
-        showToast(`Viaje de ${formatKm(km)} registrado`);
+        body.garage_id = garageId;
+        const { error } = await supa.from('viajes').insert(body);
+        if (error) throw error;
+        const km = parseFloat(viajeForm.km_recorridos);
+        if (viajeForm.es_favor) {
+          const N = conductores.length;
+          const perC = N > 0 ? km / N : 0;
+          const pq = personas.find(p => p.id === parseInt(viajeForm.para_quien_id));
+          showToast(`Favor de ${formatKm(km)} a ${pq?.nombre}. Se reparte entre ${N} conductores: ${formatKm(perC)} cada uno`);
+        } else if (viajeForm.acompanantes_ids.length > 0) {
+          const total = 1 + viajeForm.acompanantes_ids.length;
+          showToast(`Viaje de ${formatKm(km)} compartido entre ${total} conductores: ${formatKm(km / total)} cada uno`);
+        } else {
+          showToast(`Viaje de ${formatKm(km)} registrado`);
+        }
       }
+      setShowViaje(false); setViajeForm(initialViaje()); setMostrarAcompanantes(false); setEditingViaje(null);
+      await fetchAll();
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
+  };
+
+  const deleteMovimiento = async (tipo, id) => {
+    if (!confirm('¿Borrar este movimiento? No se puede deshacer.')) return;
+    setLoading(true);
+    try {
+      const { error } = await supa.from(tipo === 'viaje' ? 'viajes' : 'cargas').delete().eq('id', id);
+      if (error) throw error;
+      showToast('Movimiento borrado');
+      await fetchAll();
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const startEditViaje = (v) => {
+    setEditingViaje(v);
+    setViajeForm({
+      fecha: v.fecha,
+      conductor_id: v.conductor_id,
+      km_recorridos: v.km_recorridos.toString(),
+      es_favor: v.es_favor,
+      para_quien_id: v.para_quien_id || '',
+      descripcion: v.descripcion || '',
+      acompanantes_ids: v.acompanantes_ids || []
+    });
+    setMostrarAcompanantes((v.acompanantes_ids || []).length > 0);
+    setError(''); setShowViaje(true);
+  };
+
+  const startEditCarga = (c) => {
+    setEditingCarga(c);
+    setCargaForm({
+      fecha: c.fecha,
+      tipo: c.tipo,
+      pagado_por_id: c.pagado_por_id,
+      autonomia_despues: c.autonomia_despues?.toString() || '',
+      litros: c.litros?.toString() || '',
+      monto_clp: c.monto_clp?.toString() || ''
+    });
+    setError(''); setShowCarga(true);
   };
 
   const saveConfig = async (rendimiento) => {
     setLoading(true); setError('');
     try {
-      await supaFetch('configuracion?id=eq.1', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          rendimiento_km_litro: rendimiento ? parseFloat(rendimiento) : null,
-          updated_at: new Date().toISOString()
-        })
-      });
+      const { error } = await supa.from('configuracion').update({
+        rendimiento_km_litro: rendimiento ? parseFloat(rendimiento) : null,
+        updated_at: new Date().toISOString()
+      }).eq('garage_id', garageId);
+      if (error) throw error;
       await fetchAll();
-      showToast(rendimiento ? `Rendimiento configurado: ${rendimiento} km/L` : 'Rendimiento desactivado');
+      showToast(rendimiento ? `Rendimiento: ${rendimiento} km/L` : 'Rendimiento desactivado');
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
 
   const resetData = async () => {
-    setLoading(true); setError('');
+    setLoading(true);
     try {
-      await supaFetch('viajes?id=gt.0', { method: 'DELETE' });
-      await supaFetch('cargas?id=gt.0', { method: 'DELETE' });
+      await supa.from('viajes').delete().eq('garage_id', garageId);
+      await supa.from('cargas').delete().eq('garage_id', garageId);
       setConfirmandoReset(false);
       await fetchAll();
       showToast('Datos reiniciados. Las personas se mantienen.');
@@ -360,84 +717,49 @@ function BencinaApp() {
     try {
       const coloresUsados = personas.map(p => p.color);
       const colorAsignado = personaForm.color || COLORES_DISPONIBLES.find(c => !coloresUsados.includes(c)) || '#888';
-      await supaFetch('personas', {
-        method: 'POST',
-        body: JSON.stringify({
-          nombre: personaForm.nombre.trim(),
-          tipo: personaForm.tipo,
-          color: colorAsignado
-        })
+      const { error } = await supa.from('personas').insert({
+        nombre: personaForm.nombre.trim(),
+        tipo: personaForm.tipo,
+        color: colorAsignado,
+        garage_id: garageId
       });
-      const nombreGuardado = personaForm.nombre.trim();
+      if (error) throw error;
+      const nombre = personaForm.nombre.trim();
       setPersonaForm(initialPersona());
       await fetchAll();
-      showToast(`${nombreGuardado} agregada/o`);
+      showToast(`${nombre} agregada/o`);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const regenerarCodigo = async () => {
+    if (!confirm('¿Regenerar código? El anterior dejará de funcionar.')) return;
+    setLoading(true);
+    try {
+      const nuevo = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const { error } = await supa.from('garages').update({ invite_code: nuevo }).eq('id', garageId);
+      if (error) throw error;
+      await fetchAll();
+      showToast('Código regenerado');
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
 
   // ==================== HELPERS ====================
-  // Formatear km: muestra decimales solo cuando los hay (12 km vs 12,5 km)
   const formatKm = (n) => {
-    const num = n || 0;
+    const num = Number(n) || 0;
     const rounded = Math.round(num * 10) / 10;
-    return rounded.toLocaleString('es-CL', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 1
-    }) + ' km';
+    return rounded.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' km';
   };
   const colorByLevel = (km) => km > 100 ? '#52796F' : km > 50 ? '#E9C46A' : '#BC4749';
   const labelByLevel = (km) => km > 100 ? 'óptimo' : km > 50 ? 'medio' : 'bajo';
 
-  // ==================== PANTALLA DE SETUP ====================
-  if (!connected) {
-    return (
-      <div className="min-h-screen w-full font-body" style={{ background: '#FAF7F0' }}>
-        <div className="max-w-md mx-auto px-6 pt-16 pb-12">
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 shadow-sm" style={{ background: '#E76F51' }}>
-              <FuelIcon className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="font-display" style={{ fontWeight: 600, fontSize: '2.5rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
-              Bencina<br /><span className="italic" style={{ color: '#E76F51' }}>Compartida</span>
-            </h1>
-            <p className="mt-4 text-stone-600 text-sm">Conecta tu Supabase para empezar</p>
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1.5 uppercase tracking-widest">Project URL</label>
-                <input type="text" placeholder="https://xxxxx.supabase.co" value={config.url} onChange={e => setConfig({ ...config, url: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-body" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1.5 uppercase tracking-widest">anon public key</label>
-                <div className="relative">
-                  <input type={showApiKey ? "text" : "password"} placeholder="eyJhbGc... o sb_publishable_..." value={config.key} onChange={e => setConfig({ ...config, key: e.target.value })} className="w-full px-4 py-2.5 pr-11 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-body" />
-                  <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-stone-500 hover:text-stone-800 rounded">
-                    {showApiKey ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              {error && (<div className="flex gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800"><AlertIcon className="w-4 h-4 flex-shrink-0 mt-0.5" /><span className="break-words">{error}</span></div>)}
-              <button onClick={connect} disabled={connecting || !config.url || !config.key} className="w-full py-3 rounded-lg text-white font-medium text-sm transition-all disabled:opacity-40 hover:opacity-90" style={{ background: '#1c1917' }}>
-                {connecting ? 'Conectando...' : 'Conectar →'}
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-stone-500 text-center mt-6 leading-relaxed">Ambos datos están en Supabase →<br /><span className="font-medium text-stone-700">Settings → API</span></p>
-        </div>
-      </div>
-    );
-  }
-
-  // ==================== APP PRINCIPAL ====================
   const nivelColor = colorByLevel(nivelActual);
   const maxConsumo = Math.max(...conductorBalances.map(c => c.consumo), 1);
 
+  // ==================== RENDER ====================
   return (
     <div className="min-h-screen w-full pb-32 font-body" style={{ background: '#FAF7F0' }}>
-
-      {/* TOAST */}
       {toast && (
         <div className="fixed top-3 left-3 right-3 z-[60] max-w-md mx-auto animate-slideDown">
           <div className="rounded-xl p-3 shadow-lg flex items-start gap-2.5 text-white text-sm" style={{ background: toast.type === 'error' ? '#BC4749' : '#1c1917' }}>
@@ -448,25 +770,23 @@ function BencinaApp() {
         </div>
       )}
 
-      {/* HEADER */}
       <header className="px-5 pt-8 pb-6">
         <div className="flex items-end justify-between mb-1">
           <h1 className="font-display" style={{ fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
             Bencina <span className="italic" style={{ color: '#E76F51' }}>Compartida</span>
           </h1>
           <div className="flex items-center gap-3">
-            <button onClick={() => setShowPersonas(true)} className="text-stone-600 hover:text-stone-900" title="Personas"><SettingsIcon className="w-4 h-4" /></button>
+            <button onClick={() => setShowPersonas(true)} className="text-stone-600 hover:text-stone-900"><SettingsIcon className="w-4 h-4" /></button>
             <button onClick={fetchAll} disabled={loading} className="text-xs text-stone-600 hover:text-stone-900 flex items-center gap-1 disabled:opacity-50">
               <RefreshIcon className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />{loading ? '' : 'Actualizar'}
             </button>
           </div>
         </div>
-        <p className="text-xs text-stone-500 mt-2">{personas.map(p => p.nombre).join(' · ')}</p>
+        <p className="text-xs text-stone-500 mt-2">{garage?.nombre} · Hola, <span className="font-medium">{miPersona.nombre}</span></p>
       </header>
 
       <div className="px-5">
-
-        {/* HERO: KM DE AUTONOMÍA */}
+        {/* HERO */}
         <div className="rounded-3xl p-6 mb-4 relative overflow-hidden" style={{ background: '#1c1917' }}>
           <div className="absolute top-0 right-0 w-48 h-48 rounded-full" style={{ background: nivelColor, opacity: 0.22, transform: 'translate(35%, -35%)', filter: 'blur(2px)' }} />
           <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full" style={{ background: nivelColor, opacity: 0.1, transform: 'translate(-40%, 40%)', filter: 'blur(4px)' }} />
@@ -510,7 +830,7 @@ function BencinaApp() {
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2.5">
                     <div className="w-1.5 h-9 rounded-full" style={{ background: c.color }} />
-                    <div className="font-medium text-stone-900">{c.nombre}</div>
+                    <div className="font-medium text-stone-900">{c.nombre}{c.id === miPersona.id && <span className="text-xs text-stone-500 ml-1">(tú)</span>}</div>
                   </div>
                   <div className={`font-display ${c.balance < 0 ? 'text-red-600' : c.balance > 0 ? 'text-emerald-700' : 'text-stone-600'}`} style={{ fontWeight: 600, fontSize: '1.125rem', letterSpacing: '-0.01em' }}>
                     {c.balance >= 0 ? '+' : ''}{formatKm(c.balance)}
@@ -531,7 +851,7 @@ function BencinaApp() {
           </div>
         )}
 
-        {/* APORTES DEL HOGAR */}
+        {/* HOGAR */}
         {miembroAportes.length > 0 && (
           <div className="bg-white rounded-2xl border border-stone-200 mb-4 overflow-hidden">
             <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 flex items-center gap-1.5 font-semibold" style={{ fontSize: '10px' }}>
@@ -552,23 +872,21 @@ function BencinaApp() {
               </div>
             ))}
             <div className="px-5 pb-3 pt-2 text-xs text-stone-500 italic">
-              Aportes del hogar se reparten equitativamente entre los conductores
+              Aportes del hogar se reparten entre los conductores
             </div>
           </div>
         )}
 
-        {/* MINI BAR CHART: CONSUMO POR CONDUCTOR */}
+        {/* BAR CHART */}
         {conductorBalances.some(c => c.consumo > 0) && (
           <div className="bg-white rounded-2xl border border-stone-200 mb-4 p-5">
-            <div className="uppercase tracking-widest text-stone-500 font-semibold mb-3" style={{ fontSize: '10px' }}>
-              Consumo del mes
-            </div>
+            <div className="uppercase tracking-widest text-stone-500 font-semibold mb-3" style={{ fontSize: '10px' }}>Consumo del mes</div>
             <div className="space-y-2.5">
               {conductorBalances.map(c => (
                 <div key={c.id} className="flex items-center gap-3">
                   <div className="w-16 text-xs text-stone-700 truncate">{c.nombre}</div>
                   <div className="flex-1 bg-stone-100 rounded-full h-2.5 relative overflow-hidden">
-                    <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${Math.max((c.consumo / maxConsumo) * 100, 2)}%`, background: c.color }} />
+                    <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.max((c.consumo / maxConsumo) * 100, 2)}%`, background: c.color }} />
                   </div>
                   <div className="w-20 text-xs text-stone-900 font-medium text-right">{formatKm(c.consumo)}</div>
                 </div>
@@ -577,17 +895,18 @@ function BencinaApp() {
           </div>
         )}
 
-        {/* MOVIMIENTOS RECIENTES */}
-        <Movimientos viajes={viajes} cargas={cargas} personas={personas} formatKm={formatKm} />
+        {/* MOVIMIENTOS */}
+        <Movimientos viajes={viajes} cargas={cargas} personas={personas} formatKm={formatKm}
+          onEditViaje={startEditViaje} onEditCarga={startEditCarga} onDelete={deleteMovimiento} />
       </div>
 
-      {/* BOTONES FLOTANTES */}
+      {/* BOTONES */}
       <div className="fixed bottom-0 left-0 right-0 px-5 pb-6 pt-6" style={{ background: 'linear-gradient(to top, #FAF7F0 70%, rgba(250,247,240,0))' }}>
         <div className="max-w-md mx-auto flex gap-3">
-          <button onClick={() => { setError(''); setShowCarga(true); }} className="flex-1 py-3.5 rounded-xl bg-white border-2 border-stone-900 font-medium text-sm text-stone-900 flex items-center justify-center gap-2 hover:bg-stone-50 transition-colors">
-            <ReceiptIcon className="w-4 h-4" />Cargar bencina
+          <button onClick={() => { setError(''); setEditingCarga(null); setCargaForm(initialCarga()); setShowCarga(true); }} className="flex-1 py-3.5 rounded-xl bg-white border-2 border-stone-900 font-medium text-sm text-stone-900 flex items-center justify-center gap-2 hover:bg-stone-50">
+            <ReceiptIcon className="w-4 h-4" />Cargar
           </button>
-          <button onClick={() => { setError(''); setShowViaje(true); }} className="flex-1 py-3.5 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
+          <button onClick={() => { setError(''); setEditingViaje(null); setViajeForm(initialViaje()); setMostrarAcompanantes(false); setShowViaje(true); }} className="flex-1 py-3.5 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 hover:opacity-90" style={{ background: '#1c1917' }}>
             <PlusIcon className="w-4 h-4" strokeWidth={2.5} />Viaje
           </button>
         </div>
@@ -595,65 +914,49 @@ function BencinaApp() {
 
       {/* MODAL CARGA */}
       {showCarga && (
-        <Modal title="Registrar carga" onClose={() => { setShowCarga(false); setShowCargaDetalles(false); }}>
+        <Modal title={editingCarga ? 'Editar carga' : 'Registrar carga'} onClose={() => { setShowCarga(false); setShowCargaDetalles(false); setEditingCarga(null); }}>
           <div className="space-y-4">
             <Field label="¿Quién pagó?">
               <div className="space-y-2">
                 {personas.map(p => (
                   <button key={p.id} onClick={() => setCargaForm({ ...cargaForm, pagado_por_id: p.id })} className="w-full py-2.5 px-3 rounded-lg text-sm font-medium border-2 transition-all flex items-center justify-between" style={{ borderColor: cargaForm.pagado_por_id === p.id ? p.color : '#e7e5e4', background: cargaForm.pagado_por_id === p.id ? p.color : 'white', color: cargaForm.pagado_por_id === p.id ? 'white' : '#1c1917' }}>
-                    <span className="flex items-center gap-2">
-                      {p.tipo === 'conductor' ? <CarIcon className="w-3.5 h-3.5" /> : <HomeIcon className="w-3.5 h-3.5" />}
-                      {p.nombre}
-                    </span>
+                    <span className="flex items-center gap-2">{p.tipo === 'conductor' ? <CarIcon className="w-3.5 h-3.5" /> : <HomeIcon className="w-3.5 h-3.5" />}{p.nombre}</span>
                     <span className="text-xs opacity-70 uppercase tracking-wider">{p.tipo === 'conductor' ? 'conductor' : 'hogar'}</span>
                   </button>
                 ))}
               </div>
             </Field>
-
             <Field label="Tipo">
               <div className="grid grid-cols-3 gap-2">
                 {[{v:'inicio_mes',l:'Inicio mes'},{v:'dia_20',l:'Día 20'},{v:'extra',l:'Extra'}].map(t => (
-                  <button key={t.v} onClick={() => setCargaForm({ ...cargaForm, tipo: t.v })} className={`py-2.5 rounded-lg text-sm font-medium border-2 transition-all ${cargaForm.tipo === t.v ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
-                    {t.l}
-                  </button>
+                  <button key={t.v} onClick={() => setCargaForm({ ...cargaForm, tipo: t.v })} className={`py-2.5 rounded-lg text-sm font-medium border-2 ${cargaForm.tipo === t.v ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>{t.l}</button>
                 ))}
               </div>
             </Field>
-
             {configuracion.rendimiento_km_litro ? (
               <Field label={`Litros cargados (a ${configuracion.rendimiento_km_litro} km/L)`}>
-                <input type="number" step="0.01" placeholder="35.5" value={cargaForm.litros} onChange={e => setCargaForm({ ...cargaForm, litros: e.target.value })} className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-body text-2xl font-display font-semibold text-center" style={{ letterSpacing: '-0.01em' }} />
-                {cargaForm.litros && (
+                <input type="number" step="0.01" placeholder="35.5" value={cargaForm.litros} onChange={e => setCargaForm({ ...cargaForm, litros: e.target.value })} className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-body text-2xl font-display font-semibold text-center" />
+                {cargaForm.litros && !editingCarga && (
                   <p className="text-xs text-stone-500 mt-1.5 text-center">
                     Aportarás <span className="font-medium text-stone-800">{formatKm(parseFloat(cargaForm.litros) * configuracion.rendimiento_km_litro)}</span> al pool
-                    <br />
-                    <span style={{ fontSize: '10px' }}>(estanque pasa de {formatKm(nivelActual)} a {formatKm(nivelActual + parseFloat(cargaForm.litros) * configuracion.rendimiento_km_litro)})</span>
                   </p>
                 )}
               </Field>
             ) : (
               <Field label="¿Cuántos km marca el tablero después de cargar?">
-                <input type="number" step="0.1" placeholder="450" value={cargaForm.autonomia_despues} onChange={e => setCargaForm({ ...cargaForm, autonomia_despues: e.target.value })} className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-body text-2xl font-display font-semibold text-center" style={{ letterSpacing: '-0.01em' }} />
-                {cargaForm.autonomia_despues && (
+                <input type="number" step="0.1" placeholder="450" value={cargaForm.autonomia_despues} onChange={e => setCargaForm({ ...cargaForm, autonomia_despues: e.target.value })} className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-body text-2xl font-display font-semibold text-center" />
+                {cargaForm.autonomia_despues && !editingCarga && (
                   <p className="text-xs text-stone-500 mt-1.5 text-center">
-                    Aporte estimado: <span className="font-medium text-stone-800">{formatKm(parseFloat(cargaForm.autonomia_despues) - nivelActual)}</span> al pool
-                    <br />
-                    <span style={{ fontSize: '10px' }}>(antes había {formatKm(nivelActual)})</span>
+                    Aporte: <span className="font-medium text-stone-800">{formatKm(parseFloat(cargaForm.autonomia_despues) - nivelActual)}</span>
                   </p>
                 )}
-                <p className="text-xs text-stone-400 mt-2 italic">
-                  💡 Configura el rendimiento del auto en ⚙ Personas → Auto, y carga por litros (más rápido)
-                </p>
               </Field>
             )}
-
             <Field label="Fecha">
               <input type="date" value={cargaForm.fecha} onChange={e => setCargaForm({ ...cargaForm, fecha: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
             </Field>
-
             <button type="button" onClick={() => setShowCargaDetalles(!showCargaDetalles)} className="text-xs text-stone-500 hover:text-stone-800 underline">
-              {showCargaDetalles ? '− Ocultar detalles opcionales' : '+ Más detalles (CLP, litros)'}
+              {showCargaDetalles ? '− Ocultar detalles' : '+ Más detalles'}
             </button>
             {showCargaDetalles && (
               <div className="space-y-3 pl-3 border-l-2 border-stone-200">
@@ -667,10 +970,9 @@ function BencinaApp() {
                 )}
               </div>
             )}
-
             {error && <ErrorBox msg={error} />}
-            <button onClick={saveCarga} disabled={loading} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
-              {loading ? 'Guardando...' : 'Guardar carga'}
+            <button onClick={saveCarga} disabled={loading} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40" style={{ background: '#1c1917' }}>
+              {loading ? 'Guardando...' : (editingCarga ? 'Guardar cambios' : 'Guardar carga')}
             </button>
           </div>
         </Modal>
@@ -678,103 +980,66 @@ function BencinaApp() {
 
       {/* MODAL VIAJE */}
       {showViaje && (
-        <Modal title="Registrar viaje" onClose={() => { setShowViaje(false); setMostrarAcompanantes(false); }}>
+        <Modal title={editingViaje ? 'Editar viaje' : 'Registrar viaje'} onClose={() => { setShowViaje(false); setMostrarAcompanantes(false); setEditingViaje(null); }}>
           <div className="space-y-4">
             <Field label="Conductor">
               {conductores.length === 0 ? (
-                <p className="text-xs text-red-700 bg-red-50 p-3 rounded-lg">No hay conductores. Agrega uno desde el ícono ⚙ arriba.</p>
+                <p className="text-xs text-red-700 bg-red-50 p-3 rounded-lg">No hay conductores.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {conductores.map(c => (
-                    <button key={c.id} onClick={() => setViajeForm({ ...viajeForm, conductor_id: c.id })} className="py-2.5 rounded-lg text-sm font-medium border-2 transition-all" style={{ borderColor: viajeForm.conductor_id === c.id ? c.color : '#e7e5e4', background: viajeForm.conductor_id === c.id ? c.color : 'white', color: viajeForm.conductor_id === c.id ? 'white' : '#1c1917' }}>
-                      {c.nombre}
-                    </button>
+                    <button key={c.id} onClick={() => setViajeForm({ ...viajeForm, conductor_id: c.id })} className="py-2.5 rounded-lg text-sm font-medium border-2" style={{ borderColor: viajeForm.conductor_id === c.id ? c.color : '#e7e5e4', background: viajeForm.conductor_id === c.id ? c.color : 'white', color: viajeForm.conductor_id === c.id ? 'white' : '#1c1917' }}>{c.nombre}</button>
                   ))}
                 </div>
               )}
             </Field>
-
             <Field label="Km recorridos">
               <input type="number" step="0.1" placeholder="50" value={viajeForm.km_recorridos} onChange={e => setViajeForm({ ...viajeForm, km_recorridos: e.target.value })} className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-body text-2xl font-display font-semibold text-center" />
             </Field>
-
             <Field label="Fecha">
               <input type="date" value={viajeForm.fecha} onChange={e => setViajeForm({ ...viajeForm, fecha: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
             </Field>
-
             <Field label="Descripción (opcional)">
-              <input type="text" placeholder="Ida al supermercado" value={viajeForm.descripcion} onChange={e => setViajeForm({ ...viajeForm, descripcion: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+              <input type="text" placeholder="Ej: Al supermercado" value={viajeForm.descripcion} onChange={e => setViajeForm({ ...viajeForm, descripcion: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
             </Field>
-
-            {/* Toggle: favor */}
             <label className="flex items-center gap-2.5 cursor-pointer py-1">
-              <input type="checkbox" checked={viajeForm.es_favor}
-                disabled={mostrarAcompanantes}
-                onChange={e => setViajeForm({ ...viajeForm, es_favor: e.target.checked, acompanantes_ids: [] })}
-                className="w-4 h-4 accent-stone-900 disabled:opacity-40" />
+              <input type="checkbox" checked={viajeForm.es_favor} disabled={mostrarAcompanantes} onChange={e => setViajeForm({ ...viajeForm, es_favor: e.target.checked, acompanantes_ids: [] })} className="w-4 h-4 accent-stone-900 disabled:opacity-40" />
               <span className={`text-sm ${mostrarAcompanantes ? 'text-stone-400' : 'text-stone-700'}`}>¿Fue un favor para alguien del hogar?</span>
             </label>
-
-            {/* Toggle: acompañantes */}
             <label className="flex items-center gap-2.5 cursor-pointer py-1">
-              <input type="checkbox" checked={mostrarAcompanantes}
-                disabled={viajeForm.es_favor}
-                onChange={e => {
-                  setMostrarAcompanantes(e.target.checked);
-                  if (!e.target.checked) setViajeForm({ ...viajeForm, acompanantes_ids: [] });
-                }}
-                className="w-4 h-4 accent-stone-900 disabled:opacity-40" />
+              <input type="checkbox" checked={mostrarAcompanantes} disabled={viajeForm.es_favor} onChange={e => { setMostrarAcompanantes(e.target.checked); if (!e.target.checked) setViajeForm({ ...viajeForm, acompanantes_ids: [] }); }} className="w-4 h-4 accent-stone-900 disabled:opacity-40" />
               <span className={`text-sm ${viajeForm.es_favor ? 'text-stone-400' : 'text-stone-700'}`}>¿Iba acompañado por otro conductor?</span>
             </label>
-
-            {/* Pista visual: favor */}
             {viajeForm.es_favor && viajeForm.km_recorridos && conductores.length > 0 && (
               <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900">
-                Los <span className="font-medium">{formatKm(parseFloat(viajeForm.km_recorridos))}</span> de este favor se repartirán entre los {conductores.length} conductores: <span className="font-medium">{formatKm(parseFloat(viajeForm.km_recorridos) / conductores.length)}</span> cada uno
+                Los <span className="font-medium">{formatKm(parseFloat(viajeForm.km_recorridos))}</span> se repartirán entre {conductores.length} conductores: <span className="font-medium">{formatKm(parseFloat(viajeForm.km_recorridos) / conductores.length)}</span> cada uno
               </div>
             )}
-
-            {/* Selector: para quién (favor) */}
             {viajeForm.es_favor && (
               miembros.length === 0 ? (
-                <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">No hay miembros del hogar. Agrega uno desde el ícono ⚙ arriba.</p>
+                <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">No hay miembros del hogar.</p>
               ) : (
                 <Field label="¿Para quién?">
                   <div className="grid grid-cols-2 gap-2">
                     {miembros.map(m => (
-                      <button key={m.id} onClick={() => setViajeForm({ ...viajeForm, para_quien_id: m.id })} className="py-2.5 rounded-lg text-sm font-medium border-2 transition-all" style={{ borderColor: viajeForm.para_quien_id === m.id ? m.color : '#e7e5e4', background: viajeForm.para_quien_id === m.id ? m.color : 'white', color: viajeForm.para_quien_id === m.id ? 'white' : '#1c1917' }}>
-                        {m.nombre}
-                      </button>
+                      <button key={m.id} onClick={() => setViajeForm({ ...viajeForm, para_quien_id: m.id })} className="py-2.5 rounded-lg text-sm font-medium border-2" style={{ borderColor: viajeForm.para_quien_id === m.id ? m.color : '#e7e5e4', background: viajeForm.para_quien_id === m.id ? m.color : 'white', color: viajeForm.para_quien_id === m.id ? 'white' : '#1c1917' }}>{m.nombre}</button>
                     ))}
                   </div>
                 </Field>
               )
             )}
-
-            {/* Selector: acompañantes */}
             {mostrarAcompanantes && !viajeForm.es_favor && (() => {
-              const otrosConductores = conductores.filter(c => c.id !== parseInt(viajeForm.conductor_id));
-              if (!viajeForm.conductor_id) {
-                return <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">Selecciona primero al conductor principal.</p>;
-              }
-              if (otrosConductores.length === 0) {
-                return <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">No hay otros conductores para acompañar.</p>;
-              }
+              const otros = conductores.filter(c => c.id !== parseInt(viajeForm.conductor_id));
+              if (!viajeForm.conductor_id) return <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">Selecciona el conductor principal primero.</p>;
+              if (otros.length === 0) return <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg">No hay otros conductores.</p>;
               return (
                 <>
                   <Field label="¿Quién más iba?">
                     <div className="grid grid-cols-2 gap-2">
-                      {otrosConductores.map(c => {
-                        const seleccionado = viajeForm.acompanantes_ids.includes(c.id);
+                      {otros.map(c => {
+                        const sel = viajeForm.acompanantes_ids.includes(c.id);
                         return (
-                          <button key={c.id} onClick={() => {
-                            const nuevos = seleccionado
-                              ? viajeForm.acompanantes_ids.filter(id => id !== c.id)
-                              : [...viajeForm.acompanantes_ids, c.id];
-                            setViajeForm({ ...viajeForm, acompanantes_ids: nuevos });
-                          }} className="py-2.5 rounded-lg text-sm font-medium border-2 transition-all" style={{ borderColor: seleccionado ? c.color : '#e7e5e4', background: seleccionado ? c.color : 'white', color: seleccionado ? 'white' : '#1c1917' }}>
-                            {c.nombre}
-                          </button>
+                          <button key={c.id} onClick={() => { const nuevos = sel ? viajeForm.acompanantes_ids.filter(id => id !== c.id) : [...viajeForm.acompanantes_ids, c.id]; setViajeForm({ ...viajeForm, acompanantes_ids: nuevos }); }} className="py-2.5 rounded-lg text-sm font-medium border-2" style={{ borderColor: sel ? c.color : '#e7e5e4', background: sel ? c.color : 'white', color: sel ? 'white' : '#1c1917' }}>{c.nombre}</button>
                         );
                       })}
                     </div>
@@ -787,10 +1052,9 @@ function BencinaApp() {
                 </>
               );
             })()}
-
             {error && <ErrorBox msg={error} />}
-            <button onClick={saveViaje} disabled={loading} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
-              {loading ? 'Guardando...' : 'Guardar viaje'}
+            <button onClick={saveViaje} disabled={loading} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40" style={{ background: '#1c1917' }}>
+              {loading ? 'Guardando...' : (editingViaje ? 'Guardar cambios' : 'Guardar viaje')}
             </button>
           </div>
         </Modal>
@@ -798,16 +1062,32 @@ function BencinaApp() {
 
       {/* MODAL PERSONAS */}
       {showPersonas && (
-        <Modal title="Personas" onClose={() => { setShowPersonas(false); setError(''); setPersonaForm(initialPersona()); }}>
+        <Modal title="Configuración" onClose={() => { setShowPersonas(false); setError(''); setPersonaForm(initialPersona()); }}>
           <div className="space-y-5">
+            {/* Garage info + código */}
+            <div className="bg-stone-50 rounded-xl p-4 border border-stone-200">
+              <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-1">Garage</div>
+              <div className="font-medium mb-2">{garage?.nombre}</div>
+              <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-1 mt-3">Código de invitación</div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-white px-3 py-2 rounded-lg border border-stone-300 font-mono text-sm tracking-widest">{garage?.invite_code}</code>
+                <button onClick={() => { navigator.clipboard?.writeText(garage?.invite_code); showToast('Código copiado'); }} className="px-3 py-2 rounded-lg bg-white border border-stone-300 hover:bg-stone-50">
+                  <CopyIcon className="w-4 h-4 text-stone-700" />
+                </button>
+              </div>
+              <button onClick={regenerarCodigo} className="text-xs text-stone-500 hover:text-stone-800 underline mt-2">Regenerar código</button>
+            </div>
+
+            {/* Personas */}
             <div>
               <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-2">Conductores</div>
               <div className="space-y-1.5">
-                {conductores.length === 0 ? <p className="text-xs text-stone-500 italic">Sin conductores aún.</p> : conductores.map(c => (
+                {conductores.length === 0 ? <p className="text-xs text-stone-500 italic">Sin conductores.</p> : conductores.map(c => (
                   <div key={c.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-stone-50">
                     <div className="w-2 h-7 rounded-full" style={{ background: c.color }} />
                     <CarIcon className="w-3.5 h-3.5 text-stone-500" />
-                    <span className="text-sm text-stone-800">{c.nombre}</span>
+                    <span className="text-sm text-stone-800 flex-1">{c.nombre}{c.id === miPersona.id && <span className="text-xs text-stone-500 ml-1">(tú)</span>}</span>
+                    {c.user_id && <span className="text-xs text-emerald-700">●</span>}
                   </div>
                 ))}
               </div>
@@ -828,86 +1108,78 @@ function BencinaApp() {
               </div>
             )}
 
+            {/* Agregar */}
             <div className="border-t border-stone-200 pt-4">
               <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-3">Agregar persona</div>
               <div className="space-y-3">
                 <Field label="Nombre">
-                  <input type="text" placeholder="Ej: Mamá, Hermano, Lucía..." value={personaForm.nombre} onChange={e => setPersonaForm({ ...personaForm, nombre: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+                  <input type="text" placeholder="Ej: Mamá" value={personaForm.nombre} onChange={e => setPersonaForm({ ...personaForm, nombre: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
                 </Field>
                 <Field label="Tipo">
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => setPersonaForm({ ...personaForm, tipo: 'conductor' })} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${personaForm.tipo === 'conductor' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
-                      <CarIcon className="w-3.5 h-3.5" />Conductor
-                    </button>
-                    <button onClick={() => setPersonaForm({ ...personaForm, tipo: 'miembro_hogar' })} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${personaForm.tipo === 'miembro_hogar' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>
-                      <HomeIcon className="w-3.5 h-3.5" />Hogar
-                    </button>
+                    <button onClick={() => setPersonaForm({ ...personaForm, tipo: 'conductor' })} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${personaForm.tipo === 'conductor' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}><CarIcon className="w-3.5 h-3.5" />Conductor</button>
+                    <button onClick={() => setPersonaForm({ ...personaForm, tipo: 'miembro_hogar' })} className={`py-2.5 rounded-lg text-sm font-medium border-2 flex items-center justify-center gap-1.5 ${personaForm.tipo === 'miembro_hogar' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}><HomeIcon className="w-3.5 h-3.5" />Hogar</button>
                   </div>
                 </Field>
-                <Field label="Color (opcional)">
+                <Field label="Color">
                   <div className="flex gap-2 flex-wrap">
                     {COLORES_DISPONIBLES.map(c => {
                       const usado = personas.some(p => p.color === c);
-                      return (
-                        <button key={c} onClick={() => setPersonaForm({ ...personaForm, color: c })} disabled={usado && personaForm.color !== c} className={`w-8 h-8 rounded-full border-2 transition-all ${usado && personaForm.color !== c ? 'opacity-25 cursor-not-allowed' : ''} ${personaForm.color === c ? 'ring-2 ring-offset-2 ring-stone-900 border-white' : 'border-white'}`} style={{ background: c }} />
-                      );
+                      return <button key={c} onClick={() => setPersonaForm({ ...personaForm, color: c })} disabled={usado && personaForm.color !== c} className={`w-8 h-8 rounded-full border-2 ${usado && personaForm.color !== c ? 'opacity-25' : ''} ${personaForm.color === c ? 'ring-2 ring-offset-2 ring-stone-900 border-white' : 'border-white'}`} style={{ background: c }} />;
                     })}
                   </div>
                 </Field>
                 {error && <ErrorBox msg={error} />}
-                <button onClick={savePersona} disabled={loading || !personaForm.nombre.trim()} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40 hover:opacity-90 transition-opacity" style={{ background: '#1c1917' }}>
+                <button onClick={savePersona} disabled={loading || !personaForm.nombre.trim()} className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-40" style={{ background: '#1c1917' }}>
                   {loading ? 'Guardando...' : 'Agregar persona'}
                 </button>
               </div>
             </div>
 
-            {/* CONFIGURACIÓN DEL AUTO */}
-            <div className="border-t border-stone-200 pt-4 mt-4">
+            {/* Auto */}
+            <div className="border-t border-stone-200 pt-4">
               <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-3 flex items-center gap-1.5">
                 <CarIcon className="w-3 h-3" />Configuración del auto
               </div>
               <Field label="Rendimiento (km por litro)">
-                <input
-                  key={`rend-${configuracion.rendimiento_km_litro || 'empty'}`}
-                  type="number" step="0.1" placeholder="12.5"
+                <input key={`rend-${configuracion.rendimiento_km_litro || 'empty'}`} type="number" step="0.1" placeholder="12.5"
                   defaultValue={configuracion.rendimiento_km_litro || ''}
                   onBlur={(e) => {
                     const newVal = e.target.value;
                     const oldVal = configuracion.rendimiento_km_litro?.toString() || '';
                     if (newVal !== oldVal) saveConfig(newVal);
                   }}
-                  className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body"
-                />
-                <p className="text-xs text-stone-500 mt-1.5 leading-relaxed">
+                  className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body" />
+                <p className="text-xs text-stone-500 mt-1.5">
                   {configuracion.rendimiento_km_litro
-                    ? `✅ Cargas se registran por litros (la app calcula los km a ${configuracion.rendimiento_km_litro} km/L).`
-                    : 'Si lo configuras, en cada carga ingresas solo los litros — la app calcula los km automáticamente. Si lo dejas vacío, sigues ingresando la autonomía del tablero.'
-                  }
+                    ? `✅ Cargas se registran por litros (calculado a ${configuracion.rendimiento_km_litro} km/L)`
+                    : 'Configúralo para registrar cargas por litros en vez de por km del tablero'}
                 </p>
               </Field>
             </div>
 
-            {/* ZONA PELIGROSA: Reiniciar mes */}
-            <div className="border-t-2 border-dashed border-red-200 pt-4 mt-4">
+            {/* Cerrar sesión */}
+            <div className="border-t border-stone-200 pt-4">
+              <button onClick={onLogout} className="w-full py-2.5 rounded-lg border border-stone-300 text-stone-700 font-medium text-sm hover:bg-stone-50 flex items-center justify-center gap-2">
+                <LogoutIcon className="w-4 h-4" />Cerrar sesión
+              </button>
+            </div>
+
+            {/* Zona peligrosa */}
+            <div className="border-t-2 border-dashed border-red-200 pt-4">
               <div className="text-xs uppercase tracking-widest text-red-700 font-semibold mb-2">Zona peligrosa</div>
               {!confirmandoReset ? (
                 <div>
-                  <p className="text-xs text-stone-600 mb-3">Borra todos los viajes y cargas del historial. Las personas se mantienen.</p>
-                  <button onClick={() => setConfirmandoReset(true)} className="w-full py-2.5 rounded-lg border-2 border-red-300 text-red-700 font-medium text-sm hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
-                    Reiniciar mes (borrar todo)
-                  </button>
+                  <p className="text-xs text-stone-600 mb-3">Borra viajes y cargas (personas se mantienen).</p>
+                  <button onClick={() => setConfirmandoReset(true)} className="w-full py-2.5 rounded-lg border-2 border-red-300 text-red-700 font-medium text-sm hover:bg-red-50">Reiniciar mes</button>
                 </div>
               ) : (
                 <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
                   <p className="text-sm text-red-900 font-medium mb-1">¿Estás seguro?</p>
-                  <p className="text-xs text-red-700 mb-3">Esto borrará <span className="font-semibold">{viajes.length} viajes y {cargas.length} cargas</span>. No se puede deshacer.</p>
+                  <p className="text-xs text-red-700 mb-3">Borrará {viajes.length} viajes y {cargas.length} cargas.</p>
                   <div className="flex gap-2">
-                    <button onClick={() => setConfirmandoReset(false)} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-white border border-stone-300 text-stone-700 font-medium text-sm hover:bg-stone-50">
-                      Cancelar
-                    </button>
-                    <button onClick={resetData} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-red-600 text-white font-medium text-sm hover:bg-red-700 disabled:opacity-50">
-                      {loading ? 'Borrando...' : 'Sí, borrar todo'}
-                    </button>
+                    <button onClick={() => setConfirmandoReset(false)} className="flex-1 py-2.5 rounded-lg bg-white border border-stone-300 text-stone-700 text-sm">Cancelar</button>
+                    <button onClick={resetData} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-red-600 text-white text-sm disabled:opacity-50">{loading ? 'Borrando...' : 'Sí, borrar'}</button>
                   </div>
                 </div>
               )}
@@ -919,28 +1191,29 @@ function BencinaApp() {
   );
 }
 
-// ==================== COMPONENTES AUXILIARES ====================
-function Movimientos({ viajes, cargas, personas, formatKm }) {
+// ==================== MOVIMIENTOS ====================
+function Movimientos({ viajes, cargas, personas, formatKm, onEditViaje, onEditCarga, onDelete }) {
   const movimientos = useMemo(() => {
     const m = [
-      ...viajes.map(v => ({ tipo: 'viaje', id: 'v' + v.id, fecha: v.fecha, created_at: v.created_at, km: v.km_recorridos, persona_id: v.conductor_id, descripcion: v.descripcion, es_favor: v.es_favor, para_quien_id: v.para_quien_id, acompanantes_ids: v.acompanantes_ids || [] })),
-      ...cargas.map(c => ({ tipo: 'carga', id: 'c' + c.id, fecha: c.fecha, created_at: c.created_at, km: c.km_aportados, persona_id: c.pagado_por_id, descripcion: c.tipo, autonomia_despues: c.autonomia_despues, monto_clp: c.monto_clp }))
+      ...viajes.map(v => ({ tipo: 'viaje', id: 'v' + v.id, raw: v, fecha: v.fecha, created_at: v.created_at, km: Number(v.km_recorridos), persona_id: v.conductor_id, descripcion: v.descripcion, es_favor: v.es_favor, para_quien_id: v.para_quien_id, acompanantes_ids: v.acompanantes_ids || [], updated_at: v.updated_at, updated_by_id: v.updated_by_id })),
+      ...cargas.map(c => ({ tipo: 'carga', id: 'c' + c.id, raw: c, fecha: c.fecha, created_at: c.created_at, km: Number(c.km_aportados), persona_id: c.pagado_por_id, descripcion: c.tipo, autonomia_despues: c.autonomia_despues, monto_clp: c.monto_clp, updated_at: c.updated_at, updated_by_id: c.updated_by_id }))
     ];
-    return m.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 25);
+    return m.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 30);
   }, [viajes, cargas]);
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
       <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 font-semibold" style={{ fontSize: '10px' }}>Movimientos</div>
       {movimientos.length === 0 ? (
-        <div className="px-5 py-8 text-center text-sm text-stone-500"><p>Aún sin movimientos.</p><p className="text-xs mt-1">Toca + Viaje o Cargar para empezar</p></div>
+        <div className="px-5 py-8 text-center text-sm text-stone-500"><p>Aún sin movimientos.</p></div>
       ) : (
         movimientos.map((m, i) => {
           const persona = personas.find(p => p.id === m.persona_id);
-          const paraQuien = m.para_quien_id ? personas.find(p => p.id === m.para_quien_id) : null;
+          const editor = m.updated_by_id ? personas.find(p => p.id === m.updated_by_id) : null;
+          const paraQ = m.para_quien_id ? personas.find(p => p.id === m.para_quien_id) : null;
           const titulo = m.tipo === 'carga'
-            ? `Carga · ${m.descripcion?.replace('_', ' ')} · llegó a ${m.autonomia_despues} km`
-            : (m.es_favor && paraQuien ? `Favor para ${paraQuien.nombre}` : (m.descripcion || 'Viaje'));
+            ? `Carga · ${m.descripcion?.replace('_', ' ')} · llegó a ${Math.round(m.autonomia_despues)} km`
+            : (m.es_favor && paraQ ? `Favor para ${paraQ.nombre}` : (m.descripcion || 'Viaje'));
           return (
             <div key={m.id} className={`px-5 py-3 flex items-center gap-3 ${i < movimientos.length - 1 ? 'border-b border-stone-100' : ''}`}>
               <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: m.tipo === 'carga' ? '#E9C46A' : persona?.color || '#999' }}>
@@ -950,15 +1223,23 @@ function Movimientos({ viajes, cargas, personas, formatKm }) {
                 <div className="text-sm font-medium text-stone-900 truncate">{titulo}</div>
                 <div className="text-xs text-stone-500">
                   {persona?.nombre}
-                  {m.acompanantes_ids && m.acompanantes_ids.length > 0 && (
-                    <span> + {m.acompanantes_ids.map(id => personas.find(p => p.id === id)?.nombre).filter(Boolean).join(', ')}</span>
-                  )}
+                  {m.acompanantes_ids && m.acompanantes_ids.length > 0 && <span> + {m.acompanantes_ids.map(id => personas.find(p => p.id === id)?.nombre).filter(Boolean).join(', ')}</span>}
                   {' · '}{new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
                   {m.tipo === 'carga' && m.monto_clp ? ` · $${m.monto_clp.toLocaleString('es-CL')}` : ''}
                 </div>
+                {editor && m.updated_at && (
+                  <div className="text-stone-400 italic mt-0.5" style={{ fontSize: '10px' }}>
+                    editado por {editor.nombre} el {new Date(m.updated_at).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                  </div>
+                )}
               </div>
-              <div className={`text-sm font-semibold ${m.tipo === 'carga' ? 'text-emerald-700' : 'text-stone-900'}`}>
-                {m.tipo === 'carga' ? '+' : '−'}{formatKm(m.km)}
+              <div className="flex items-center gap-2">
+                <div className={`text-sm font-semibold ${m.tipo === 'carga' ? 'text-emerald-700' : 'text-stone-900'}`}>
+                  {m.tipo === 'carga' ? '+' : '−'}{formatKm(m.km)}
+                </div>
+                <button onClick={() => m.tipo === 'carga' ? onEditCarga(m.raw) : onEditViaje(m.raw)} className="p-1.5 text-stone-400 hover:text-stone-800 rounded">
+                  <EditIcon className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           );
@@ -974,7 +1255,7 @@ function Modal({ title, children, onClose }) {
       <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-display" style={{ fontWeight: 600, fontSize: '1.5rem', letterSpacing: '-0.01em' }}>{title}</h2>
-          <button onClick={onClose} className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center hover:bg-stone-200 transition-colors"><XIcon className="w-4 h-4" /></button>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center hover:bg-stone-200"><XIcon className="w-4 h-4" /></button>
         </div>
         {children}
       </div>
