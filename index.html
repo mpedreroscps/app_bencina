@@ -44,6 +44,9 @@ const { useState, useMemo, useEffect } = React;
 // ╚════════════════════════════════════════════════════════════╝
 const SUPABASE_URL = 'https://ycccszqhoabxrdeqxfkb.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljY2NzenFob2FieHJkZXF4ZmtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyMjQxMjcsImV4cCI6MjA5MjgwMDEyN30.f2NaJUntFU9GxSphXqQmnh6PwkAKU3q5ASaSMRXGnuQ';
+// 🔑 Clave para borrar movimientos (solo tú la conoces)
+// Cámbiala por una clave secreta tuya:
+const ADMIN_PASSWORD = 'MURANO2263PASSWORD';
 // ╚════════════════════════════════════════════════════════════╝
 
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -67,6 +70,7 @@ const EyeOffIcon = (p) => <Icon {...p}><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/
 const EditIcon = (p) => <Icon {...p}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></Icon>;
 const LogoutIcon = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></Icon>;
 const CopyIcon = (p) => <Icon {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></Icon>;
+const TrashIcon = (p) => <Icon {...p}><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></Icon>;
 
 const COLORES_DISPONIBLES = ['#E76F51', '#52796F', '#3D5A80', '#E9C46A', '#9D4EDD', '#F4A261', '#2A9D8F', '#BC4749', '#588157', '#6A4C93', '#F77F00'];
 
@@ -637,15 +641,38 @@ function MainApp({ session, miPersona, onLogout }) {
     finally { setLoading(false); }
   };
 
-  const deleteMovimiento = async (tipo, id) => {
-    if (!confirm('¿Borrar este movimiento? No se puede deshacer.')) return;
+  // Estados para el modal de borrar
+  const [deletingMovimiento, setDeletingMovimiento] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+
+  // Estados para ajustar autonomía
+  const [showAjuste, setShowAjuste] = useState(false);
+  const [ajusteValor, setAjusteValor] = useState('');
+
+  const requestDelete = (tipo, raw) => {
+    const titulo = tipo === 'viaje'
+      ? `viaje de ${formatKm(Number(raw.km_recorridos))}`
+      : `carga de ${formatKm(Number(raw.km_aportados))}`;
+    setDeletingMovimiento({ tipo, id: raw.id, titulo });
+    setDeletePassword('');
+    setDeleteError('');
+  };
+
+  const confirmDelete = async () => {
+    if (deletePassword !== ADMIN_PASSWORD) {
+      setDeleteError('Clave incorrecta');
+      return;
+    }
     setLoading(true);
     try {
-      const { error } = await supa.from(tipo === 'viaje' ? 'viajes' : 'cargas').delete().eq('id', id);
+      const { error } = await supa.from(deletingMovimiento.tipo === 'viaje' ? 'viajes' : 'cargas').delete().eq('id', deletingMovimiento.id);
       if (error) throw error;
+      setDeletingMovimiento(null);
+      setDeletePassword('');
       showToast('Movimiento borrado');
       await fetchAll();
-    } catch (e) { setError(e.message); }
+    } catch (e) { setDeleteError(e.message); }
     finally { setLoading(false); }
   };
 
@@ -737,6 +764,44 @@ function MainApp({ session, miPersona, onLogout }) {
     finally { setLoading(false); }
   };
 
+  const ajustarAutonomia = async () => {
+    if (cargas.length === 0) { setError('Necesitas registrar al menos una carga antes de ajustar'); return; }
+    if (ajusteValor === '' || parseFloat(ajusteValor) < 0) { setError('Ingresa un valor válido (km que marca el tablero)'); return; }
+    setLoading(true); setError('');
+    try {
+      // 1. Encontrar la última carga (la más reciente por created_at)
+      const ord = [...cargas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      const ultima = ord[0];
+      const ultimaTime = new Date(ultima.created_at);
+
+      // 2. Calcular cuánto se ha consumido desde esa carga
+      const consumidoPosterior = viajes
+        .filter(v => new Date(v.created_at) > ultimaTime)
+        .reduce((s, v) => s + Number(v.km_recorridos), 0);
+
+      // 3. Nueva autonomia_despues = lo que marca el tablero AHORA + lo consumido después de la carga
+      const nuevaAutonomia = parseFloat(ajusteValor) + consumidoPosterior;
+
+      // 4. El nivel antes de la última carga no cambia; recalcular km_aportados
+      const nivelAntesUltimaCarga = Number(ultima.autonomia_despues) - Number(ultima.km_aportados);
+      const nuevoKmAportados = nuevaAutonomia - nivelAntesUltimaCarga;
+
+      const { error } = await supa.from('cargas').update({
+        autonomia_despues: nuevaAutonomia,
+        km_aportados: nuevoKmAportados,
+        updated_at: new Date().toISOString(),
+        updated_by_id: miPersona.id
+      }).eq('id', ultima.id);
+      if (error) throw error;
+
+      setShowAjuste(false);
+      setAjusteValor('');
+      showToast(`Autonomía ajustada a ${formatKm(parseFloat(ajusteValor))}`);
+      await fetchAll();
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
   // ==================== HELPERS ====================
   const formatKm = (n) => {
     const num = Number(n) || 0;
@@ -783,8 +848,13 @@ function MainApp({ session, miPersona, onLogout }) {
           <div className="absolute top-0 right-0 w-48 h-48 rounded-full" style={{ background: nivelColor, opacity: 0.22, transform: 'translate(35%, -35%)', filter: 'blur(2px)' }} />
           <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full" style={{ background: nivelColor, opacity: 0.1, transform: 'translate(-40%, 40%)', filter: 'blur(4px)' }} />
           <div className="relative">
-            <div className="flex items-center gap-2 text-stone-400 uppercase tracking-widest mb-3 font-semibold" style={{ fontSize: '11px' }}>
-              <FuelIcon className="w-3.5 h-3.5" />Quedan de autonomía
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-stone-400 uppercase tracking-widest font-semibold" style={{ fontSize: '11px' }}>
+                <FuelIcon className="w-3.5 h-3.5" />Quedan de autonomía
+              </div>
+              <button onClick={() => { setShowAjuste(true); setAjusteValor(Math.round(nivelActual).toString()); setError(''); }} className="text-stone-400 hover:text-stone-200 p-1" title="Ajustar autonomía">
+                <EditIcon className="w-3.5 h-3.5" />
+              </button>
             </div>
             <div className="font-display flex items-baseline gap-2" style={{ color: nivelColor, fontWeight: 600, fontSize: '3.5rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
               {Math.round(nivelActual).toLocaleString('es-CL')}
@@ -889,7 +959,7 @@ function MainApp({ session, miPersona, onLogout }) {
 
         {/* MOVIMIENTOS */}
         <Movimientos viajes={viajes} cargas={cargas} personas={personas} formatKm={formatKm}
-          onEditViaje={startEditViaje} onEditCarga={startEditCarga} onDelete={deleteMovimiento} />
+          onEditViaje={startEditViaje} onEditCarga={startEditCarga} onDelete={requestDelete} />
       </div>
 
       {/* BOTONES */}
@@ -1179,6 +1249,78 @@ function MainApp({ session, miPersona, onLogout }) {
           </div>
         </Modal>
       )}
+
+      {/* MODAL AJUSTAR AUTONOMÍA */}
+      {showAjuste && (() => {
+        const ord = [...cargas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const ultima = ord[0];
+        const pagador = ultima ? personas.find(p => p.id === ultima.pagado_por_id) : null;
+        return (
+          <Modal title="Ajustar autonomía" onClose={() => { setShowAjuste(false); setAjusteValor(''); setError(''); }}>
+            <div className="space-y-4">
+              <p className="text-sm text-stone-600">
+                Si el tablero del auto marca diferente de lo que dice la app, ajústalo aquí.
+              </p>
+              <Field label="¿Cuántos km marca el tablero AHORA?">
+                <input
+                  type="number" step="0.1" placeholder="42"
+                  value={ajusteValor}
+                  onChange={e => setAjusteValor(e.target.value)}
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-lg border-2 border-stone-300 focus:border-stone-900 focus:outline-none font-body text-2xl font-display font-semibold text-center"
+                />
+                <p className="text-xs text-stone-500 mt-1.5 text-center">
+                  La app actualmente calcula <span className="font-medium text-stone-800">{formatKm(nivelActual)}</span>
+                </p>
+              </Field>
+              {ultima && ajusteValor !== '' && parseFloat(ajusteValor) !== Math.round(nivelActual) && (
+                <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 leading-relaxed">
+                  Se actualizará la última carga (de <span className="font-medium">{pagador?.nombre}</span>, del {new Date(ultima.fecha + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}). El aporte de {pagador?.nombre} cambiará de <span className="font-medium">{formatKm(Number(ultima.km_aportados))}</span> en consecuencia.
+                </div>
+              )}
+              {error && <ErrorBox msg={error} />}
+              <div className="flex gap-2">
+                <button onClick={() => { setShowAjuste(false); setAjusteValor(''); setError(''); }} className="flex-1 py-2.5 rounded-lg bg-white border border-stone-300 text-stone-700 font-medium text-sm hover:bg-stone-50">
+                  Cancelar
+                </button>
+                <button onClick={ajustarAutonomia} disabled={loading || ajusteValor === ''} className="flex-1 py-2.5 rounded-lg text-white font-medium text-sm disabled:opacity-40 hover:opacity-90" style={{ background: '#1c1917' }}>
+                  {loading ? 'Guardando...' : 'Ajustar'}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {/* MODAL BORRAR MOVIMIENTO */}
+      {deletingMovimiento && (
+        <Modal title="Borrar movimiento" onClose={() => { setDeletingMovimiento(null); setDeletePassword(''); setDeleteError(''); }}>
+          <div className="space-y-4">
+            <p className="text-sm text-stone-700">
+              Vas a borrar el <span className="font-medium">{deletingMovimiento.titulo}</span>. Esta acción <span className="font-medium">no se puede deshacer</span>.
+            </p>
+            <Field label="Clave de administrador">
+              <input
+                type="password" placeholder="••••••••"
+                value={deletePassword}
+                onChange={e => { setDeletePassword(e.target.value); setDeleteError(''); }}
+                onKeyDown={e => e.key === 'Enter' && confirmDelete()}
+                autoFocus
+                className="w-full px-4 py-2.5 rounded-lg border border-stone-300 focus:border-stone-900 focus:outline-none font-body"
+              />
+            </Field>
+            {deleteError && <ErrorBox msg={deleteError} />}
+            <div className="flex gap-2">
+              <button onClick={() => { setDeletingMovimiento(null); setDeletePassword(''); setDeleteError(''); }} className="flex-1 py-2.5 rounded-lg bg-white border border-stone-300 text-stone-700 font-medium text-sm hover:bg-stone-50">
+                Cancelar
+              </button>
+              <button onClick={confirmDelete} disabled={loading || !deletePassword} className="flex-1 py-2.5 rounded-lg bg-red-600 text-white font-medium text-sm hover:bg-red-700 disabled:opacity-40">
+                {loading ? 'Borrando...' : 'Borrar'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1216,21 +1358,24 @@ function Movimientos({ viajes, cargas, personas, formatKm, onEditViaje, onEditCa
                 <div className="text-xs text-stone-500">
                   {persona?.nombre}
                   {m.acompanantes_ids && m.acompanantes_ids.length > 0 && <span> + {m.acompanantes_ids.map(id => personas.find(p => p.id === id)?.nombre).filter(Boolean).join(', ')}</span>}
-                  {' · '}{new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                  {' · '}{new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
                   {m.tipo === 'carga' && m.monto_clp ? ` · $${m.monto_clp.toLocaleString('es-CL')}` : ''}
                 </div>
                 {editor && m.updated_at && (
                   <div className="text-stone-400 italic mt-0.5" style={{ fontSize: '10px' }}>
-                    editado por {editor.nombre} el {new Date(m.updated_at).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                    editado por {editor.nombre} el {new Date(m.updated_at).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <div className={`text-sm font-semibold ${m.tipo === 'carga' ? 'text-emerald-700' : 'text-stone-900'}`}>
+              <div className="flex items-center gap-1">
+                <div className={`text-sm font-semibold ${m.tipo === 'carga' ? 'text-emerald-700' : 'text-stone-900'} mr-1`}>
                   {m.tipo === 'carga' ? '+' : '−'}{formatKm(m.km)}
                 </div>
                 <button onClick={() => m.tipo === 'carga' ? onEditCarga(m.raw) : onEditViaje(m.raw)} className="p-1.5 text-stone-400 hover:text-stone-800 rounded">
                   <EditIcon className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => onDelete(m.tipo, m.raw)} className="p-1.5 text-stone-400 hover:text-red-600 rounded">
+                  <TrashIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
