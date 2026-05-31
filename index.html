@@ -25,6 +25,14 @@
   input[type="number"] { -moz-appearance: textfield; }
   @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   .animate-slideDown { animation: slideDown 0.3s ease-out; }
+  @keyframes fadeInUp { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .animate-fadeInUp { animation: fadeInUp 0.4s ease-out both; }
+  @keyframes growBar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .animate-growBar { animation: growBar 0.6s cubic-bezier(0.22,1,0.36,1) both; transform-origin: left; }
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+  /* scrollbar fino para el selector de meses */
+  .scroll-x { scrollbar-width: none; -ms-overflow-style: none; }
+  .scroll-x::-webkit-scrollbar { display: none; }
 </style>
 </head>
 <body>
@@ -71,8 +79,34 @@ const EditIcon = (p) => <Icon {...p}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20
 const LogoutIcon = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></Icon>;
 const CopyIcon = (p) => <Icon {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></Icon>;
 const TrashIcon = (p) => <Icon {...p}><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></Icon>;
+const ChevronLeftIcon = (p) => <Icon {...p}><polyline points="15 18 9 12 15 6"/></Icon>;
+const ChevronRightIcon = (p) => <Icon {...p}><polyline points="9 18 15 12 9 6"/></Icon>;
+const UserIcon = (p) => <Icon {...p}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>;
+const TrendUpIcon = (p) => <Icon {...p}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></Icon>;
+const TrendDownIcon = (p) => <Icon {...p}><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></Icon>;
+const ArchiveIcon = (p) => <Icon {...p}><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></Icon>;
+const CoinIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.5-1 2-2.5 2.5"/><path d="M12 16h.01"/></Icon>;
 
 const COLORES_DISPONIBLES = ['#E76F51', '#52796F', '#3D5A80', '#E9C46A', '#9D4EDD', '#F4A261', '#2A9D8F', '#BC4749', '#588157', '#6A4C93', '#F77F00'];
+
+const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+// Convierte "2026-05" en "Mayo 2026"
+const labelMes = (ym) => {
+  if (!ym) return '';
+  const [y, m] = ym.split('-').map(Number);
+  return MESES_ES[m - 1].charAt(0).toUpperCase() + MESES_ES[m - 1].slice(1) + ' ' + y;
+};
+const labelMesCorto = (ym) => {
+  if (!ym) return '';
+  const [y, m] = ym.split('-').map(Number);
+  return MESES_ES[m - 1].slice(0, 3) + ' ' + String(y).slice(2);
+};
+// Resta n meses a "YYYY-MM"
+const mesAnterior = (ym, n = 1) => {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 - n, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+};
 
 // ==================== APP ROOT ====================
 function BencinaApp() {
@@ -80,7 +114,6 @@ function BencinaApp() {
   const [miPersona, setMiPersona] = useState(null);
   const [loadingSession, setLoadingSession] = useState(true);
 
-  // Bootstrap: detectar sesión guardada y suscribirse a cambios
   useEffect(() => {
     supa.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -93,7 +126,6 @@ function BencinaApp() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Cuando hay sesión, buscar la persona del usuario
   useEffect(() => {
     if (!session) { setMiPersona(null); return; }
     (async () => {
@@ -107,15 +139,12 @@ function BencinaApp() {
     })();
   }, [session]);
 
-  // ¿Configuración válida?
   if (SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_ANON_KEY.includes('TU_ANON_KEY')) {
     return <ConfigErrorScreen />;
   }
-
   if (loadingSession) {
     return <div className="min-h-screen flex items-center justify-center font-body text-stone-500 text-sm" style={{ background: '#FAF7F0' }}>Cargando...</div>;
   }
-
   if (!session) return <AuthScreen />;
   if (!miPersona) return <OnboardingScreen onJoined={(p) => setMiPersona(p)} />;
   return <MainApp session={session} miPersona={miPersona} onLogout={() => supa.auth.signOut()} />;
@@ -369,7 +398,6 @@ function UnirseGarageScreen({ onJoined, onBack }) {
     );
   }
 
-  // Step: elegir
   return (
     <div className="min-h-screen w-full font-body" style={{ background: '#FAF7F0' }}>
       <div className="max-w-md mx-auto px-6 pt-16 pb-12">
@@ -451,9 +479,16 @@ function MainApp({ session, miPersona, onLogout }) {
   const [showPersonas, setShowPersonas] = useState(false);
   const [showCargaDetalles, setShowCargaDetalles] = useState(false);
   const [mostrarAcompanantes, setMostrarAcompanantes] = useState(false);
-  const [confirmandoReset, setConfirmandoReset] = useState(false);
+  const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   const [editingViaje, setEditingViaje] = useState(null);
   const [editingCarga, setEditingCarga] = useState(null);
+
+  // NUEVO: mes que se está visualizando en el dashboard (YYYY-MM)
+  const mesActualSistema = new Date().toISOString().slice(0, 7);
+  const [mesVisible, setMesVisible] = useState(mesActualSistema);
+
+  // NUEVO: vista de perfil de una persona (null = dashboard)
+  const [perfilPersonaId, setPerfilPersonaId] = useState(null);
 
   const today = () => new Date().toISOString().slice(0, 10);
   const initialCarga = () => ({ fecha: today(), tipo: 'inicio_mes', pagado_por_id: '', autonomia_despues: '', litros: '', monto_clp: '' });
@@ -495,8 +530,21 @@ function MainApp({ session, miPersona, onLogout }) {
   // ==================== DERIVADOS ====================
   const conductores = useMemo(() => personas.filter(p => p.tipo === 'conductor'), [personas]);
   const miembros = useMemo(() => personas.filter(p => p.tipo === 'miembro_hogar'), [personas]);
-  const currentMonth = new Date().toISOString().slice(0, 7);
 
+  // Lista de meses con datos (para el selector), de más reciente a más antiguo.
+  // Siempre incluye el mes actual del sistema, aunque no tenga datos todavía.
+  const mesesConDatos = useMemo(() => {
+    const set = new Set();
+    cargas.forEach(c => set.add(c.fecha.slice(0, 7)));
+    viajes.forEach(v => set.add(v.fecha.slice(0, 7)));
+    set.add(mesActualSistema);
+    return Array.from(set).sort().reverse();
+  }, [cargas, viajes, mesActualSistema]);
+
+  // ¿Estoy viendo el mes en curso o un mes histórico?
+  const esMesActual = mesVisible === mesActualSistema;
+
+  // Nivel físico del estanque (NO depende del mes — es el combustible real del auto)
   const nivelActual = useMemo(() => {
     if (cargas.length === 0) return 0;
     const ord = [...cargas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -506,33 +554,46 @@ function MainApp({ session, miPersona, onLogout }) {
     return Math.max(0, Number(ultima.autonomia_despues) - consumido);
   }, [cargas, viajes]);
 
-  const conductorBalances = useMemo(() => {
+  // NUEVO: contador del MES VISIBLE (parte de cero cada mes)
+  const movimientoMes = useMemo(() => {
+    const cargadoMes = cargas.filter(c => c.fecha.startsWith(mesVisible)).reduce((s, c) => s + Number(c.km_aportados), 0);
+    const consumidoMes = viajes.filter(v => v.fecha.startsWith(mesVisible)).reduce((s, v) => s + Number(v.km_recorridos), 0);
+    return { cargadoMes, consumidoMes };
+  }, [cargas, viajes, mesVisible]);
+
+  // Cálculo de balances de conductores PARA UN MES DADO (reutilizable)
+  const calcularBalancesParaMes = (mes) => {
     const N = conductores.length;
     if (N === 0) return [];
     return conductores.map(c => {
-      const cargasMes = cargas.filter(carga => carga.fecha.startsWith(currentMonth));
+      const cargasMes = cargas.filter(carga => carga.fecha.startsWith(mes));
       const aporte_propio = cargasMes.filter(carga => carga.pagado_por_id === c.id).reduce((s, carga) => s + Number(carga.km_aportados), 0);
+      // $$ aportado en bencina EXTRA (solo cargas tipo 'extra' pagadas por este conductor)
+      const clp_extra = cargasMes.filter(carga => carga.pagado_por_id === c.id && carga.tipo === 'extra').reduce((s, carga) => s + (Number(carga.monto_clp) || 0), 0);
       const aporte_recibido = cargasMes.filter(carga => {
         const p = personas.find(p => p.id === carga.pagado_por_id);
         return p?.tipo === 'miembro_hogar';
       }).reduce((s, carga) => s + Number(carga.km_aportados) / N, 0);
-      const consumo_propio = viajes.filter(v => v.fecha.startsWith(currentMonth) && !v.es_favor).reduce((sum, v) => {
+      const consumo_propio = viajes.filter(v => v.fecha.startsWith(mes) && !v.es_favor).reduce((sum, v) => {
         const acomp = v.acompanantes_ids || [];
         const involucrados = [v.conductor_id, ...acomp];
         if (involucrados.includes(c.id)) return sum + Number(v.km_recorridos) / involucrados.length;
         return sum;
       }, 0);
-      const consumo_favor_compartido = viajes.filter(v => v.es_favor && v.fecha.startsWith(currentMonth)).reduce((s, v) => s + Number(v.km_recorridos) / N, 0);
+      const consumo_favor_compartido = viajes.filter(v => v.es_favor && v.fecha.startsWith(mes)).reduce((s, v) => s + Number(v.km_recorridos) / N, 0);
       const consumo = consumo_propio + consumo_favor_compartido;
-      return { ...c, aporte_propio, aporte_recibido, consumo_propio, consumo_favor_compartido, consumo, balance: (aporte_propio + aporte_recibido) - consumo };
+      return { ...c, aporte_propio, aporte_recibido, clp_extra, consumo_propio, consumo_favor_compartido, consumo, balance: (aporte_propio + aporte_recibido) - consumo };
     });
-  }, [conductores, personas, cargas, viajes, currentMonth]);
+  };
+
+  // Balances del mes VISIBLE (lo que muestra el dashboard)
+  const conductorBalances = useMemo(() => calcularBalancesParaMes(mesVisible), [conductores, personas, cargas, viajes, mesVisible]);
 
   const miembroAportes = useMemo(() => miembros.map(m => ({
     ...m,
-    aportado: cargas.filter(c => c.pagado_por_id === m.id && c.fecha.startsWith(currentMonth)).reduce((s, c) => s + Number(c.km_aportados), 0),
-    recibido: viajes.filter(v => v.es_favor && v.para_quien_id === m.id && v.fecha.startsWith(currentMonth)).reduce((s, v) => s + Number(v.km_recorridos), 0)
-  })), [miembros, cargas, viajes, currentMonth]);
+    aportado: cargas.filter(c => c.pagado_por_id === m.id && c.fecha.startsWith(mesVisible)).reduce((s, c) => s + Number(c.km_aportados), 0),
+    recibido: viajes.filter(v => v.es_favor && v.para_quien_id === m.id && v.fecha.startsWith(mesVisible)).reduce((s, v) => s + Number(v.km_recorridos), 0)
+  })), [miembros, cargas, viajes, mesVisible]);
 
   const proximo = conductorBalances.length ? [...conductorBalances].sort((a, b) => a.balance - b.balance)[0] : null;
 
@@ -550,7 +611,6 @@ function MainApp({ session, miPersona, onLogout }) {
         km_aportados = litros * Number(configuracion.rendimiento_km_litro);
         autonomia_despues = (editingCarga ? Number(editingCarga.autonomia_despues) : nivelActual) + km_aportados;
         if (editingCarga) {
-          // Recalcular: usar el nivelActual al momento original
           const nivelAntesOriginal = Number(editingCarga.autonomia_despues) - Number(editingCarga.km_aportados);
           autonomia_despues = nivelAntesOriginal + km_aportados;
         }
@@ -718,14 +778,29 @@ function MainApp({ session, miPersona, onLogout }) {
     finally { setLoading(false); }
   };
 
-  const resetData = async () => {
-    setLoading(true);
+  // NUEVO: Cerrar mes — NO borra nada. Solo deja registro del cierre y limpia el panel
+  // moviendo la vista al mes nuevo. El histórico queda intacto para los perfiles.
+  const cerrarMes = async () => {
+    setLoading(true); setError('');
     try {
-      await supa.from('viajes').delete().eq('garage_id', garageId);
-      await supa.from('cargas').delete().eq('garage_id', garageId);
-      setConfirmandoReset(false);
+      // Intentamos dejar un registro del cierre (tabla opcional 'cierres_mes').
+      // Si la tabla no existe, no pasa nada: el cierre igual funciona.
+      try {
+        await supa.from('cierres_mes').insert({
+          garage_id: garageId,
+          mes: mesActualSistema,
+          cerrado_por_id: miPersona.id,
+          autonomia_al_cierre: nivelActual
+        });
+      } catch (_) { /* tabla opcional, ignoramos si no existe */ }
+
+      setConfirmandoCierre(false);
+      setShowPersonas(false);
+      // El panel se "limpia" solo porque los cálculos filtran por mesVisible.
+      // Nos aseguramos de estar mirando el mes en curso.
+      setMesVisible(mesActualSistema);
       await fetchAll();
-      showToast('Datos reiniciados. Las personas se mantienen.');
+      showToast(`Mes cerrado. El historial quedó guardado en los perfiles. ✔`);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -769,23 +844,15 @@ function MainApp({ session, miPersona, onLogout }) {
     if (ajusteValor === '' || parseFloat(ajusteValor) < 0) { setError('Ingresa un valor válido (km que marca el tablero)'); return; }
     setLoading(true); setError('');
     try {
-      // 1. Encontrar la última carga (la más reciente por created_at)
       const ord = [...cargas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       const ultima = ord[0];
       const ultimaTime = new Date(ultima.created_at);
-
-      // 2. Calcular cuánto se ha consumido desde esa carga
       const consumidoPosterior = viajes
         .filter(v => new Date(v.created_at) > ultimaTime)
         .reduce((s, v) => s + Number(v.km_recorridos), 0);
-
-      // 3. Nueva autonomia_despues = lo que marca el tablero AHORA + lo consumido después de la carga
       const nuevaAutonomia = parseFloat(ajusteValor) + consumidoPosterior;
-
-      // 4. El nivel antes de la última carga no cambia; recalcular km_aportados
       const nivelAntesUltimaCarga = Number(ultima.autonomia_despues) - Number(ultima.km_aportados);
       const nuevoKmAportados = nuevaAutonomia - nivelAntesUltimaCarga;
-
       const { error } = await supa.from('cargas').update({
         autonomia_despues: nuevaAutonomia,
         km_aportados: nuevoKmAportados,
@@ -793,7 +860,6 @@ function MainApp({ session, miPersona, onLogout }) {
         updated_by_id: miPersona.id
       }).eq('id', ultima.id);
       if (error) throw error;
-
       setShowAjuste(false);
       setAjusteValor('');
       showToast(`Autonomía ajustada a ${formatKm(parseFloat(ajusteValor))}`);
@@ -808,6 +874,7 @@ function MainApp({ session, miPersona, onLogout }) {
     const rounded = Math.round(num * 10) / 10;
     return rounded.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' km';
   };
+  const formatClp = (n) => '$' + (Number(n) || 0).toLocaleString('es-CL');
   const colorByLevel = (km) => km > 100 ? '#52796F' : km > 50 ? '#E9C46A' : '#BC4749';
   const labelByLevel = (km) => km > 100 ? 'óptimo' : km > 50 ? 'medio' : 'bajo';
 
@@ -815,6 +882,27 @@ function MainApp({ session, miPersona, onLogout }) {
   const maxConsumo = Math.max(...conductorBalances.map(c => c.consumo), 1);
 
   // ==================== RENDER ====================
+
+  // Si estoy viendo un perfil, renderizo la pantalla de perfil
+  if (perfilPersonaId !== null) {
+    return (
+      <PerfilPersona
+        personaId={perfilPersonaId}
+        personas={personas}
+        conductores={conductores}
+        cargas={cargas}
+        viajes={viajes}
+        miPersona={miPersona}
+        mesActualSistema={mesActualSistema}
+        calcularBalancesParaMes={calcularBalancesParaMes}
+        formatKm={formatKm}
+        formatClp={formatClp}
+        onVerOtro={(id) => setPerfilPersonaId(id)}
+        onBack={() => setPerfilPersonaId(null)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen w-full pb-32 font-body" style={{ background: '#FAF7F0' }}>
       {toast && (
@@ -827,7 +915,7 @@ function MainApp({ session, miPersona, onLogout }) {
         </div>
       )}
 
-      <header className="px-5 pt-8 pb-6">
+      <header className="px-5 pt-8 pb-4">
         <div className="flex items-end justify-between mb-1">
           <h1 className="font-display" style={{ fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
             Bencina <span className="italic" style={{ color: '#E76F51' }}>Compartida</span>
@@ -841,6 +929,16 @@ function MainApp({ session, miPersona, onLogout }) {
         </div>
         <p className="text-xs text-stone-500 mt-2">{garage?.nombre} · Hola, <span className="font-medium">{miPersona.nombre}</span></p>
       </header>
+
+      {/* SELECTOR DE MES */}
+      <div className="px-5 mb-3">
+        <SelectorMes
+          mesVisible={mesVisible}
+          mesesConDatos={mesesConDatos}
+          mesActualSistema={mesActualSistema}
+          onSelect={setMesVisible}
+        />
+      </div>
 
       <div className="px-5">
         {/* HERO */}
@@ -856,7 +954,7 @@ function MainApp({ session, miPersona, onLogout }) {
                 <EditIcon className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="font-display flex items-baseline gap-2" style={{ color: nivelColor, fontWeight: 600, fontSize: '3.5rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
+            <div className="font-display flex items-baseline gap-2 tabular-nums" style={{ color: nivelColor, fontWeight: 600, fontSize: '3.5rem', lineHeight: 1, letterSpacing: '-0.03em' }}>
               {Math.round(nivelActual).toLocaleString('es-CL')}
               <span className="text-stone-400 font-body" style={{ fontSize: '1.25rem', fontWeight: 500 }}>km</span>
             </div>
@@ -864,12 +962,34 @@ function MainApp({ session, miPersona, onLogout }) {
               <div className="w-1.5 h-1.5 rounded-full" style={{ background: nivelColor }} />
               <span className="text-xs uppercase tracking-wider font-medium" style={{ color: nivelColor }}>nivel {labelByLevel(nivelActual)}</span>
             </div>
+
+            {/* NUEVO: contador del mes (parte de cero cada mes) */}
+            <div className="mt-5 pt-4 border-t border-white/10 flex items-center gap-5">
+              <div>
+                <div className="text-stone-500 uppercase tracking-widest font-semibold" style={{ fontSize: '9px' }}>Cargado · {labelMesCorto(mesVisible)}</div>
+                <div className="font-display tabular-nums" style={{ color: '#52796F', fontWeight: 600, fontSize: '1.25rem' }}>
+                  +{Math.round(movimientoMes.cargadoMes).toLocaleString('es-CL')}<span className="text-stone-500 text-xs font-body ml-0.5">km</span>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-white/10" />
+              <div>
+                <div className="text-stone-500 uppercase tracking-widest font-semibold" style={{ fontSize: '9px' }}>Consumido · {labelMesCorto(mesVisible)}</div>
+                <div className="font-display tabular-nums" style={{ color: '#E76F51', fontWeight: 600, fontSize: '1.25rem' }}>
+                  −{Math.round(movimientoMes.consumidoMes).toLocaleString('es-CL')}<span className="text-stone-500 text-xs font-body ml-0.5">km</span>
+                </div>
+              </div>
+            </div>
+            {!esMesActual && (
+              <div className="mt-3 text-amber-300/80 flex items-center gap-1.5" style={{ fontSize: '11px' }}>
+                <ArchiveIcon className="w-3 h-3" />Viendo mes cerrado · la autonomía mostrada es la actual del auto
+              </div>
+            )}
           </div>
         </div>
 
         {/* PRÓXIMO EN CARGAR */}
         {proximo && proximo.balance < 0 && (
-          <div className="rounded-2xl p-4 mb-4 flex items-center justify-between bg-white" style={{ border: `2px solid ${proximo.color}` }}>
+          <div className="rounded-2xl p-4 mb-4 flex items-center justify-between bg-white animate-fadeInUp" style={{ border: `2px solid ${proximo.color}` }}>
             <div>
               <div className="uppercase tracking-widest text-stone-500 mb-1 font-semibold" style={{ fontSize: '10px' }}>Próximo en cargar</div>
               <div className="font-display" style={{ color: proximo.color, fontWeight: 600, fontSize: '1.5rem', letterSpacing: '-0.01em' }}>{proximo.nombre}</div>
@@ -885,16 +1005,19 @@ function MainApp({ session, miPersona, onLogout }) {
         {conductorBalances.length > 0 && (
           <div className="bg-white rounded-2xl border border-stone-200 mb-4 overflow-hidden">
             <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 flex items-center gap-1.5 font-semibold" style={{ fontSize: '10px' }}>
-              <CarIcon className="w-3 h-3" />Conductores · este mes
+              <CarIcon className="w-3 h-3" />Conductores · {labelMes(mesVisible)}
             </div>
             {conductorBalances.map((c, i) => (
-              <div key={c.id} className={`px-5 py-3.5 ${i < conductorBalances.length - 1 ? 'border-b border-stone-100' : ''}`}>
+              <button key={c.id} onClick={() => setPerfilPersonaId(c.id)} className={`w-full text-left px-5 py-3.5 hover:bg-stone-50 transition-colors ${i < conductorBalances.length - 1 ? 'border-b border-stone-100' : ''}`}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2.5">
                     <div className="w-1.5 h-9 rounded-full" style={{ background: c.color }} />
-                    <div className="font-medium text-stone-900">{c.nombre}{c.id === miPersona.id && <span className="text-xs text-stone-500 ml-1">(tú)</span>}</div>
+                    <div className="font-medium text-stone-900 flex items-center gap-1.5">
+                      {c.nombre}{c.id === miPersona.id && <span className="text-xs text-stone-500">(tú)</span>}
+                      <UserIcon className="w-3 h-3 text-stone-300" />
+                    </div>
                   </div>
-                  <div className={`font-display ${c.balance < 0 ? 'text-red-600' : c.balance > 0 ? 'text-emerald-700' : 'text-stone-600'}`} style={{ fontWeight: 600, fontSize: '1.125rem', letterSpacing: '-0.01em' }}>
+                  <div className={`font-display tabular-nums ${c.balance < 0 ? 'text-red-600' : c.balance > 0 ? 'text-emerald-700' : 'text-stone-600'}`} style={{ fontWeight: 600, fontSize: '1.125rem', letterSpacing: '-0.01em' }}>
                     {c.balance >= 0 ? '+' : ''}{formatKm(c.balance)}
                   </div>
                 </div>
@@ -908,8 +1031,11 @@ function MainApp({ session, miPersona, onLogout }) {
                     </div>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
+            <div className="px-5 pb-3 pt-1 text-stone-400 italic" style={{ fontSize: '11px' }}>
+              Toca un conductor para ver su perfil histórico
+            </div>
           </div>
         )}
 
@@ -917,7 +1043,7 @@ function MainApp({ session, miPersona, onLogout }) {
         {miembroAportes.length > 0 && (
           <div className="bg-white rounded-2xl border border-stone-200 mb-4 overflow-hidden">
             <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 flex items-center gap-1.5 font-semibold" style={{ fontSize: '10px' }}>
-              <HomeIcon className="w-3 h-3" />Hogar · este mes
+              <HomeIcon className="w-3 h-3" />Hogar · {labelMes(mesVisible)}
             </div>
             {miembroAportes.map((m, i) => (
               <div key={m.id} className={`px-5 py-3 ${i < miembroAportes.length - 1 ? 'border-b border-stone-100' : ''}`}>
@@ -942,23 +1068,26 @@ function MainApp({ session, miPersona, onLogout }) {
         {/* BAR CHART */}
         {conductorBalances.some(c => c.consumo > 0) && (
           <div className="bg-white rounded-2xl border border-stone-200 mb-4 p-5">
-            <div className="uppercase tracking-widest text-stone-500 font-semibold mb-3" style={{ fontSize: '10px' }}>Consumo del mes</div>
+            <div className="uppercase tracking-widest text-stone-500 font-semibold mb-3" style={{ fontSize: '10px' }}>Consumo de {labelMes(mesVisible)}</div>
             <div className="space-y-2.5">
               {conductorBalances.map(c => (
                 <div key={c.id} className="flex items-center gap-3">
                   <div className="w-16 text-xs text-stone-700 truncate">{c.nombre}</div>
                   <div className="flex-1 bg-stone-100 rounded-full h-2.5 relative overflow-hidden">
-                    <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.max((c.consumo / maxConsumo) * 100, 2)}%`, background: c.color }} />
+                    <div className="absolute inset-y-0 left-0 rounded-full animate-growBar" style={{ width: `${Math.max((c.consumo / maxConsumo) * 100, 2)}%`, background: c.color }} />
                   </div>
-                  <div className="w-20 text-xs text-stone-900 font-medium text-right">{formatKm(c.consumo)}</div>
+                  <div className="w-20 text-xs text-stone-900 font-medium text-right tabular-nums">{formatKm(c.consumo)}</div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* MOVIMIENTOS */}
-        <Movimientos viajes={viajes} cargas={cargas} personas={personas} formatKm={formatKm}
+        {/* MOVIMIENTOS (filtrados al mes visible) */}
+        <Movimientos
+          viajes={viajes.filter(v => v.fecha.startsWith(mesVisible))}
+          cargas={cargas.filter(c => c.fecha.startsWith(mesVisible))}
+          personas={personas} formatKm={formatKm}
           onEditViaje={startEditViaje} onEditCarga={startEditCarga} onDelete={requestDelete} />
       </div>
 
@@ -994,6 +1123,11 @@ function MainApp({ session, miPersona, onLogout }) {
                   <button key={t.v} onClick={() => setCargaForm({ ...cargaForm, tipo: t.v })} className={`py-2.5 rounded-lg text-sm font-medium border-2 ${cargaForm.tipo === t.v ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-900 border-stone-200'}`}>{t.l}</button>
                 ))}
               </div>
+              {cargaForm.tipo === 'extra' && (
+                <p className="text-xs text-stone-500 mt-1.5 flex items-center gap-1">
+                  <CoinIcon className="w-3 h-3" />El monto CLP de las cargas "extra" se acumula en el perfil de cada conductor
+                </p>
+              )}
             </Field>
             {configuracion.rendimiento_km_litro ? (
               <Field label={`Litros cargados (a ${configuracion.rendimiento_km_litro} km/L)`}>
@@ -1122,9 +1256,9 @@ function MainApp({ session, miPersona, onLogout }) {
         </Modal>
       )}
 
-      {/* MODAL PERSONAS */}
+      {/* MODAL PERSONAS / CONFIGURACIÓN */}
       {showPersonas && (
-        <Modal title="Configuración" onClose={() => { setShowPersonas(false); setError(''); setPersonaForm(initialPersona()); }}>
+        <Modal title="Configuración" onClose={() => { setShowPersonas(false); setError(''); setPersonaForm(initialPersona()); setConfirmandoCierre(false); }}>
           <div className="space-y-5">
             {/* Garage info + código */}
             <div className="bg-stone-50 rounded-xl p-4 border border-stone-200">
@@ -1227,21 +1361,29 @@ function MainApp({ session, miPersona, onLogout }) {
               </button>
             </div>
 
-            {/* Zona peligrosa */}
-            <div className="border-t-2 border-dashed border-red-200 pt-4">
-              <div className="text-xs uppercase tracking-widest text-red-700 font-semibold mb-2">Zona peligrosa</div>
-              {!confirmandoReset ? (
-                <div>
-                  <p className="text-xs text-stone-600 mb-3">Borra viajes y cargas (personas se mantienen).</p>
-                  <button onClick={() => setConfirmandoReset(true)} className="w-full py-2.5 rounded-lg border-2 border-red-300 text-red-700 font-medium text-sm hover:bg-red-50">Reiniciar mes</button>
+            {/* CIERRE DE MES (no destructivo) */}
+            <div className="border-t border-stone-200 pt-4">
+              <div className="text-xs uppercase tracking-widest text-stone-500 font-semibold mb-2 flex items-center gap-1.5">
+                <ArchiveIcon className="w-3 h-3" />Cierre de mes
+              </div>
+              {!confirmandoCierre ? (
+                <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-4">
+                  <p className="text-xs text-stone-600 mb-3 leading-relaxed">
+                    Cierra <span className="font-medium">{labelMes(mesActualSistema)}</span> y limpia el panel principal. <span className="font-medium text-emerald-800">No se borra nada</span>: todos los movimientos quedan guardados en el perfil de cada conductor y podrás consultarlos cuando quieras.
+                  </p>
+                  <button onClick={() => setConfirmandoCierre(true)} className="w-full py-2.5 rounded-lg border-2 border-emerald-400 text-emerald-800 font-medium text-sm hover:bg-emerald-50 flex items-center justify-center gap-2">
+                    <ArchiveIcon className="w-4 h-4" />Cerrar mes
+                  </button>
                 </div>
               ) : (
-                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
-                  <p className="text-sm text-red-900 font-medium mb-1">¿Estás seguro?</p>
-                  <p className="text-xs text-red-700 mb-3">Borrará {viajes.length} viajes y {cargas.length} cargas.</p>
+                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-4">
+                  <p className="text-sm text-emerald-900 font-medium mb-1">¿Cerrar {labelMes(mesActualSistema)}?</p>
+                  <p className="text-xs text-emerald-800 mb-3">
+                    El panel mostrará el mes nuevo desde cero. Los {viajes.filter(v => v.fecha.startsWith(mesActualSistema)).length} viajes y {cargas.filter(c => c.fecha.startsWith(mesActualSistema)).length} cargas de este mes quedan archivados y visibles en los perfiles.
+                  </p>
                   <div className="flex gap-2">
-                    <button onClick={() => setConfirmandoReset(false)} className="flex-1 py-2.5 rounded-lg bg-white border border-stone-300 text-stone-700 text-sm">Cancelar</button>
-                    <button onClick={resetData} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-red-600 text-white text-sm disabled:opacity-50">{loading ? 'Borrando...' : 'Sí, borrar'}</button>
+                    <button onClick={() => setConfirmandoCierre(false)} className="flex-1 py-2.5 rounded-lg bg-white border border-stone-300 text-stone-700 text-sm">Cancelar</button>
+                    <button onClick={cerrarMes} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-50">{loading ? 'Cerrando...' : 'Sí, cerrar mes'}</button>
                   </div>
                 </div>
               )}
@@ -1325,6 +1467,278 @@ function MainApp({ session, miPersona, onLogout }) {
   );
 }
 
+// ==================== SELECTOR DE MES ====================
+function SelectorMes({ mesVisible, mesesConDatos, mesActualSistema, onSelect }) {
+  // Índice del mes visible dentro de la lista (que está de reciente a antiguo)
+  const idx = mesesConDatos.indexOf(mesVisible);
+  const hayMasReciente = idx > 0;            // hacia el presente
+  const hayMasAntiguo = idx < mesesConDatos.length - 1; // hacia el pasado
+
+  const irReciente = () => { if (hayMasReciente) onSelect(mesesConDatos[idx - 1]); };
+  const irAntiguo = () => { if (hayMasAntiguo) onSelect(mesesConDatos[idx + 1]); };
+
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={irAntiguo} disabled={!hayMasAntiguo}
+        className="w-9 h-9 rounded-full bg-white border border-stone-200 flex items-center justify-center text-stone-600 disabled:opacity-30 hover:border-stone-400 flex-shrink-0">
+        <ChevronLeftIcon className="w-4 h-4" />
+      </button>
+
+      <div className="flex-1 overflow-x-auto scroll-x">
+        <div className="flex gap-2 justify-center min-w-min px-1">
+          {mesesConDatos.map(m => {
+            const activo = m === mesVisible;
+            const esActual = m === mesActualSistema;
+            return (
+              <button key={m} onClick={() => onSelect(m)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all ${activo ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:border-stone-400'}`}>
+                {labelMes(m)}{esActual && <span className={`ml-1 ${activo ? 'text-emerald-300' : 'text-emerald-600'}`}>•</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <button onClick={irReciente} disabled={!hayMasReciente}
+        className="w-9 h-9 rounded-full bg-white border border-stone-200 flex items-center justify-center text-stone-600 disabled:opacity-30 hover:border-stone-400 flex-shrink-0">
+        <ChevronRightIcon className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+// ==================== PERFIL DE PERSONA ====================
+function PerfilPersona({ personaId, personas, conductores, cargas, viajes, miPersona, mesActualSistema, calcularBalancesParaMes, formatKm, formatClp, onVerOtro, onBack }) {
+  const persona = personas.find(p => p.id === personaId);
+  const esConductor = persona?.tipo === 'conductor';
+
+  // Lista de meses con datos, de más antiguo a más reciente (para el gráfico)
+  const mesesOrdenados = useMemo(() => {
+    const set = new Set();
+    cargas.forEach(c => set.add(c.fecha.slice(0, 7)));
+    viajes.forEach(v => set.add(v.fecha.slice(0, 7)));
+    set.add(mesActualSistema);
+    return Array.from(set).sort(); // asc
+  }, [cargas, viajes, mesActualSistema]);
+
+  // Para cada mes, balance de TODOS los conductores (lo reutilizamos para comparar)
+  const balancesPorMes = useMemo(() => {
+    const out = {};
+    mesesOrdenados.forEach(m => { out[m] = calcularBalancesParaMes(m); });
+    return out;
+  }, [mesesOrdenados, cargas, viajes, personas]);
+
+  // Métricas de ESTA persona por mes (solo aplica completo a conductores)
+  const filasMes = useMemo(() => {
+    return mesesOrdenados.map(m => {
+      const balMes = balancesPorMes[m] || [];
+      const mio = balMes.find(b => b.id === personaId);
+      if (esConductor && mio) {
+        return {
+          mes: m,
+          km_usados: mio.consumo_propio,
+          km_favores: mio.consumo_favor_compartido,
+          clp_extra: mio.clp_extra,
+          balance: mio.balance,
+        };
+      }
+      // miembro de hogar: aportes y favores recibidos
+      const aportado = cargas.filter(c => c.pagado_por_id === personaId && c.fecha.startsWith(m)).reduce((s, c) => s + Number(c.km_aportados), 0);
+      const recibido = viajes.filter(v => v.es_favor && v.para_quien_id === personaId && v.fecha.startsWith(m)).reduce((s, v) => s + Number(v.km_recorridos), 0);
+      const clp = cargas.filter(c => c.pagado_por_id === personaId && c.fecha.startsWith(m)).reduce((s, c) => s + (Number(c.monto_clp) || 0), 0);
+      return { mes: m, km_usados: recibido, km_favores: 0, clp_extra: clp, balance: aportado - recibido, aportado, recibido, esHogar: true };
+    });
+  }, [mesesOrdenados, balancesPorMes, personaId, esConductor, cargas, viajes]);
+
+  // Totales acumulados (todos los meses)
+  const totales = useMemo(() => {
+    return filasMes.reduce((acc, f) => ({
+      km_usados: acc.km_usados + f.km_usados,
+      km_favores: acc.km_favores + f.km_favores,
+      clp_extra: acc.clp_extra + f.clp_extra,
+      balance: acc.balance + f.balance,
+    }), { km_usados: 0, km_favores: 0, clp_extra: 0, balance: 0 });
+  }, [filasMes]);
+
+  // Comparativa: promedio de los OTROS conductores (acumulado) para cada métrica
+  const comparativa = useMemo(() => {
+    if (!esConductor) return null;
+    const otros = conductores.filter(c => c.id !== personaId);
+    if (otros.length === 0) return null;
+    const acumOtro = { km_usados: 0, km_favores: 0, clp_extra: 0, balance: 0 };
+    mesesOrdenados.forEach(m => {
+      const balMes = balancesPorMes[m] || [];
+      otros.forEach(o => {
+        const b = balMes.find(x => x.id === o.id);
+        if (b) {
+          acumOtro.km_usados += b.consumo_propio;
+          acumOtro.km_favores += b.consumo_favor_compartido;
+          acumOtro.clp_extra += b.clp_extra;
+          acumOtro.balance += b.balance;
+        }
+      });
+    });
+    const n = otros.length;
+    return {
+      km_usados: acumOtro.km_usados / n,
+      km_favores: acumOtro.km_favores / n,
+      clp_extra: acumOtro.clp_extra / n,
+      balance: acumOtro.balance / n,
+    };
+  }, [esConductor, conductores, personaId, mesesOrdenados, balancesPorMes]);
+
+  // Máximo de km usados para escalar el gráfico
+  const maxKmMes = Math.max(...filasMes.map(f => f.km_usados), 1);
+
+  // Etiqueta de comparación (+/- vs promedio del resto)
+  const Comp = ({ valor, promedio, unidad, invertirColor }) => {
+    if (promedio == null) return null;
+    const diff = valor - promedio;
+    const casiIgual = Math.abs(diff) < (unidad === 'clp' ? 500 : 1);
+    if (casiIgual) return <span className="text-stone-400" style={{ fontSize: '11px' }}>≈ igual que el resto</span>;
+    const mas = diff > 0;
+    // Para km usados, "más" es generalmente "peor" (usaste más auto); el color lo deja decidir el caller
+    const color = invertirColor ? (mas ? '#BC4749' : '#52796F') : (mas ? '#52796F' : '#BC4749');
+    const txt = unidad === 'clp' ? formatClp(Math.abs(diff)) : formatKm(Math.abs(diff));
+    return (
+      <span className="inline-flex items-center gap-1 font-medium" style={{ fontSize: '11px', color }}>
+        {mas ? <TrendUpIcon className="w-3 h-3" /> : <TrendDownIcon className="w-3 h-3" />}
+        {mas ? '+' : '−'}{txt} vs resto
+      </span>
+    );
+  };
+
+  return (
+    <div className="min-h-screen w-full pb-12 font-body" style={{ background: '#FAF7F0' }}>
+      {/* Header del perfil */}
+      <div className="px-5 pt-8 pb-4">
+        <button onClick={onBack} className="text-sm text-stone-600 mb-5 flex items-center gap-1 hover:text-stone-900">
+          <ChevronLeftIcon className="w-4 h-4" />Volver al panel
+        </button>
+        <div className="flex items-center gap-3">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: persona?.color }}>
+            {esConductor ? <CarIcon className="w-6 h-6 text-white" /> : <HomeIcon className="w-6 h-6 text-white" />}
+          </div>
+          <div>
+            <h1 className="font-display" style={{ fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
+              {persona?.nombre}{persona?.id === miPersona.id && <span className="text-sm text-stone-500 ml-2">(tú)</span>}
+            </h1>
+            <p className="text-xs text-stone-500 mt-1 uppercase tracking-widest font-semibold">{esConductor ? 'Conductor' : 'Miembro del hogar'} · histórico acumulado</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-5 space-y-4">
+        {/* TARJETAS DE TOTALES ACUMULADOS */}
+        <div className="grid grid-cols-2 gap-3">
+          <MetricCard
+            label={esConductor ? 'Km usados (total)' : 'Km recibidos (favores)'}
+            valor={formatKm(totales.km_usados)} color="#3D5A80"
+            comp={esConductor && <Comp valor={totales.km_usados} promedio={comparativa?.km_usados} unidad="km" invertirColor />}
+          />
+          <MetricCard
+            label="$$ bencina extra (total)"
+            valor={formatClp(totales.clp_extra)} color="#E9C46A"
+            comp={esConductor && <Comp valor={totales.clp_extra} promedio={comparativa?.clp_extra} unidad="clp" />}
+          />
+          {esConductor && (
+            <MetricCard
+              label="Km en favores al hogar"
+              valor={formatKm(totales.km_favores)} color="#9D4EDD"
+              comp={<Comp valor={totales.km_favores} promedio={comparativa?.km_favores} unidad="km" invertirColor />}
+            />
+          )}
+          <MetricCard
+            label="Balance neto (total)"
+            valor={(totales.balance >= 0 ? '+' : '') + formatKm(totales.balance)}
+            color={totales.balance >= 0 ? '#52796F' : '#BC4749'}
+            comp={esConductor && <Comp valor={totales.balance} promedio={comparativa?.balance} unidad="km" />}
+          />
+        </div>
+
+        {/* GRÁFICO DE KM POR MES */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-5">
+          <div className="uppercase tracking-widest text-stone-500 font-semibold mb-4 flex items-center gap-1.5" style={{ fontSize: '10px' }}>
+            <TrendUpIcon className="w-3 h-3" />{esConductor ? 'Km usados por mes' : 'Km recibidos por mes'}
+          </div>
+          {filasMes.every(f => f.km_usados === 0) ? (
+            <p className="text-sm text-stone-400 italic text-center py-6">Aún sin datos para graficar.</p>
+          ) : (
+            <div className="flex items-end justify-between gap-2" style={{ height: '160px' }}>
+              {filasMes.map(f => {
+                const h = Math.max((f.km_usados / maxKmMes) * 130, f.km_usados > 0 ? 6 : 2);
+                const esActual = f.mes === mesActualSistema;
+                return (
+                  <div key={f.mes} className="flex-1 flex flex-col items-center justify-end gap-1.5 h-full">
+                    <div className="text-stone-700 font-medium tabular-nums" style={{ fontSize: '10px' }}>{Math.round(f.km_usados)}</div>
+                    <div className="w-full rounded-t-lg animate-fadeInUp" style={{ height: `${h}px`, background: persona?.color, opacity: esActual ? 1 : 0.55, maxWidth: '44px', margin: '0 auto' }} />
+                    <div className={`text-center ${esActual ? 'text-stone-900 font-semibold' : 'text-stone-400'}`} style={{ fontSize: '9px' }}>{labelMesCorto(f.mes)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* DESGLOSE MES A MES */}
+        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+          <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 font-semibold" style={{ fontSize: '10px' }}>Desglose mes a mes</div>
+          {[...filasMes].reverse().map((f, i, arr) => (
+            <div key={f.mes} className={`px-5 py-3 ${i < arr.length - 1 ? 'border-b border-stone-100' : ''}`}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="font-medium text-stone-900 text-sm flex items-center gap-2">
+                  {labelMes(f.mes)}
+                  {f.mes === mesActualSistema && <span className="text-emerald-600 text-xs">• en curso</span>}
+                </div>
+                <div className={`font-display tabular-nums ${f.balance < 0 ? 'text-red-600' : f.balance > 0 ? 'text-emerald-700' : 'text-stone-500'}`} style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                  {f.balance >= 0 ? '+' : ''}{formatKm(f.balance)}
+                </div>
+              </div>
+              <div className="text-xs text-stone-500">
+                {esConductor ? (
+                  <>usó <span className="text-stone-700 font-medium">{formatKm(f.km_usados)}</span>
+                  {f.km_favores > 0 && <> · favores <span className="text-stone-700 font-medium">{formatKm(f.km_favores)}</span></>}
+                  {f.clp_extra > 0 && <> · extra <span className="text-stone-700 font-medium">{formatClp(f.clp_extra)}</span></>}</>
+                ) : (
+                  <>aportó <span className="text-stone-700 font-medium">{formatKm(f.aportado || 0)}</span> · recibió <span className="text-stone-700 font-medium">{formatKm(f.recibido || 0)}</span>
+                  {f.clp_extra > 0 && <> · {formatClp(f.clp_extra)}</>}</>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* COMPARAR CON OTROS CONDUCTORES */}
+        {conductores.length > 1 && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-5">
+            <div className="uppercase tracking-widest text-stone-500 font-semibold mb-3" style={{ fontSize: '10px' }}>Ver perfil de otro conductor</div>
+            <div className="flex gap-2 flex-wrap">
+              {conductores.filter(c => c.id !== personaId).map(c => (
+                <button key={c.id} onClick={() => onVerOtro(c.id)} className="px-3 py-2 rounded-lg text-sm font-medium border-2 flex items-center gap-2 hover:opacity-90" style={{ borderColor: c.color, color: c.color }}>
+                  <div className="w-2 h-2 rounded-full" style={{ background: c.color }} />{c.nombre}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, valor, color, comp }) {
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 p-4 flex flex-col justify-between">
+      <div className="flex items-center gap-1.5 mb-2">
+        <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+        <div className="uppercase tracking-widest text-stone-500 font-semibold" style={{ fontSize: '9px' }}>{label}</div>
+      </div>
+      <div className="font-display tabular-nums text-stone-900" style={{ fontWeight: 600, fontSize: '1.4rem', letterSpacing: '-0.01em', lineHeight: 1.1 }}>{valor}</div>
+      {comp && <div className="mt-1.5">{comp}</div>}
+    </div>
+  );
+}
+
 // ==================== MOVIMIENTOS ====================
 function Movimientos({ viajes, cargas, personas, formatKm, onEditViaje, onEditCarga, onDelete }) {
   const movimientos = useMemo(() => {
@@ -1339,7 +1753,7 @@ function Movimientos({ viajes, cargas, personas, formatKm, onEditViaje, onEditCa
     <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
       <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 font-semibold" style={{ fontSize: '10px' }}>Movimientos</div>
       {movimientos.length === 0 ? (
-        <div className="px-5 py-8 text-center text-sm text-stone-500"><p>Aún sin movimientos.</p></div>
+        <div className="px-5 py-8 text-center text-sm text-stone-500"><p>Aún sin movimientos este mes.</p></div>
       ) : (
         movimientos.map((m, i) => {
           const persona = personas.find(p => p.id === m.persona_id);
@@ -1368,7 +1782,7 @@ function Movimientos({ viajes, cargas, personas, formatKm, onEditViaje, onEditCa
                 )}
               </div>
               <div className="flex items-center gap-1">
-                <div className={`text-sm font-semibold ${m.tipo === 'carga' ? 'text-emerald-700' : 'text-stone-900'} mr-1`}>
+                <div className={`text-sm font-semibold tabular-nums ${m.tipo === 'carga' ? 'text-emerald-700' : 'text-stone-900'} mr-1`}>
                   {m.tipo === 'carga' ? '+' : '−'}{formatKm(m.km)}
                 </div>
                 <button onClick={() => m.tipo === 'carga' ? onEditCarga(m.raw) : onEditViaje(m.raw)} className="p-1.5 text-stone-400 hover:text-stone-800 rounded">
