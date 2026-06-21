@@ -849,9 +849,9 @@ function MainApp({ session, miPersona, onLogout }) {
       // Mensaje según si cruza de mes o no
       const cruza = mesDeFecha(fechaInicio) !== mesDeFecha(fechaRetorno);
       if (cruza) {
-        showToast('Vacaciones registradas. Tu cuota del mes de salida se reparte entre los presentes ✈️');
+        showToast('Vacaciones registradas. La cuota del mes de salida se reparte entre los presentes ✈️');
       } else {
-        showToast('Vacaciones registradas (dentro del mismo mes): tu cuota se reserva ✈️');
+        showToast('Vacaciones registradas (dentro del mismo mes): la cuota se reserva ✈️');
       }
     } catch (e) {
       setError(e.message?.includes('relation') || e.message?.includes('does not exist')
@@ -1731,6 +1731,40 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
   }, [filasMes]);
 
   // ════════════════════════════════════════════════════════════
+  //  ESTADÍSTICAS DE ACTIVIDAD (NUEVO): datos acumulados sin comparar
+  // ════════════════════════════════════════════════════════════
+  // Cuenta TODO viaje donde la persona participó de cualquier forma:
+  //  - como conductor principal (conductor_id)
+  //  - como acompañante (dentro de acompanantes_ids)
+  //  - como beneficiario de un favor (para_quien_id, cuando es_favor)
+  const estadisticas = useMemo(() => {
+    // Filtramos los viajes en los que esta persona estuvo involucrada
+    const viajesMios = viajes.filter(v => {
+      const esPrincipal = v.conductor_id === personaId;
+      const esAcompanante = (v.acompanantes_ids || []).includes(personaId);
+      const esBeneficiario = v.es_favor && v.para_quien_id === personaId;
+      return esPrincipal || esAcompanante || esBeneficiario;
+    });
+
+    // Km recorridos: suma de los km de esos viajes
+    const kmRecorridos = viajesMios.reduce((s, v) => s + Number(v.km_recorridos), 0);
+
+    // Días distintos en que usó el auto: usamos un Set de fechas únicas.
+    // Si hizo 3 viajes el mismo día, cuenta como 1 solo día.
+    const diasUnicos = new Set(viajesMios.map(v => v.fecha)).size;
+
+    // Cantidad de aportes: número de cargas que ESTA persona pagó
+    const cantidadAportes = cargas.filter(c => c.pagado_por_id === personaId).length;
+
+    return {
+      diasUsados: diasUnicos,
+      cantidadViajes: viajesMios.length,
+      kmRecorridos,
+      cantidadAportes,
+    };
+  }, [viajes, cargas, personaId]);
+
+  // ════════════════════════════════════════════════════════════
   //  RANKING (NUEVO): posición de este conductor por km usados totales
   // ════════════════════════════════════════════════════════════
   // Calculamos el total de km usados de CADA conductor (acumulado) y ordenamos
@@ -1754,53 +1788,8 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
   // Sufijo ordinal en español: 1 → 1º, 2 → 2º, etc.
   const ordinal = (n) => `${n}º`;
 
-  // Comparativa: promedio de los OTROS conductores (acumulado) para cada métrica
-  const comparativa = useMemo(() => {
-    if (!esConductor) return null;
-    const otros = conductores.filter(c => c.id !== personaId);
-    if (otros.length === 0) return null;
-    const acumOtro = { km_usados: 0, km_favores: 0, clp_extra: 0, balance: 0 };
-    mesesOrdenados.forEach(m => {
-      const balMes = balancesPorMes[m] || [];
-      otros.forEach(o => {
-        const b = balMes.find(x => x.id === o.id);
-        if (b) {
-          acumOtro.km_usados += b.consumo_propio;
-          acumOtro.km_favores += b.consumo_favor_compartido;
-          acumOtro.clp_extra += b.clp_extra;
-          acumOtro.balance += b.balance;
-        }
-      });
-    });
-    const n = otros.length;
-    return {
-      km_usados: acumOtro.km_usados / n,
-      km_favores: acumOtro.km_favores / n,
-      clp_extra: acumOtro.clp_extra / n,
-      balance: acumOtro.balance / n,
-    };
-  }, [esConductor, conductores, personaId, mesesOrdenados, balancesPorMes]);
-
   // Máximo de km usados para escalar el gráfico
   const maxKmMes = Math.max(...filasMes.map(f => f.km_usados), 1);
-
-  // Etiqueta de comparación (+/- vs promedio del resto)
-  const Comp = ({ valor, promedio, unidad, invertirColor }) => {
-    if (promedio == null) return null;
-    const diff = valor - promedio;
-    const casiIgual = Math.abs(diff) < (unidad === 'clp' ? 500 : 1);
-    if (casiIgual) return <span className="text-stone-400" style={{ fontSize: '11px' }}>≈ igual que el resto</span>;
-    const mas = diff > 0;
-    // Para km usados, "más" es generalmente "peor" (usaste más auto); el color lo deja decidir el caller
-    const color = invertirColor ? (mas ? '#BC4749' : '#52796F') : (mas ? '#52796F' : '#BC4749');
-    const txt = unidad === 'clp' ? formatClp(Math.abs(diff)) : formatKm(Math.abs(diff));
-    return (
-      <span className="inline-flex items-center gap-1 font-medium" style={{ fontSize: '11px', color }}>
-        {mas ? <TrendUpIcon className="w-3 h-3" /> : <TrendDownIcon className="w-3 h-3" />}
-        {mas ? '+' : '−'}{txt} vs resto
-      </span>
-    );
-  };
 
   // ¿Es mi propio perfil? Solo ahí puedo registrar vacaciones.
   const esMiPerfil = persona?.id === miPersona.id;
@@ -1847,8 +1836,8 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
       </div>
 
       <div className="px-5 space-y-4">
-        {/* NUEVO: TARJETA DE MODO VACACIONES (solo en mi propio perfil) */}
-        {esMiPerfil && (
+        {/* TARJETA DE MODO VACACIONES (cualquiera puede registrar, incluso de otra persona) */}
+        {(
           <div className="bg-white rounded-2xl border border-stone-200 p-5">
             <div className="flex items-center justify-between mb-1">
               <div className="uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5" style={{ fontSize: '10px' }}>
@@ -1861,7 +1850,7 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
               )}
             </div>
             <p className="text-xs text-stone-500 leading-relaxed mb-3">
-              Si te ausentas y tus vacaciones <span className="font-medium">cruzan de un mes a otro</span>, tu cuota del mes en que sales se reparte (proporcional a los días presentes) entre los conductores que quedan. Si te vas y vuelves dentro del <span className="font-medium">mismo mes</span>, tu cuota se conserva.
+              Si {esMiPerfil ? 'te ausentas y tus' : `${persona?.nombre} se ausenta y sus`} vacaciones <span className="font-medium">cruzan de un mes a otro</span>, {esMiPerfil ? 'tu' : 'su'} cuota del mes en que {esMiPerfil ? 'sales' : 'sale'} se reparte (proporcional a los días presentes) entre los conductores que quedan. Si {esMiPerfil ? 'te vas y vuelves' : 'sale y vuelve'} dentro del <span className="font-medium">mismo mes</span>, {esMiPerfil ? 'tu' : 'su'} cuota se conserva.
             </p>
 
             {showVacForm && (
@@ -1878,11 +1867,11 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
                 {vacInicio && vacRetorno && vacRetorno >= vacInicio && (
                   mesDeFecha(vacInicio) !== mesDeFecha(vacRetorno) ? (
                     <div className="text-xs bg-teal-50 border border-teal-200 rounded-lg p-3 text-teal-900">
-                      Cruza de mes: tu cuota de <span className="font-medium">{labelMes(mesDeFecha(vacInicio))}</span> se repartirá entre los presentes (estarás presente ~{Math.round(fraccionPresenteEnMesInicio({ fecha_inicio: vacInicio }) * 100)}% del mes).
+                      Cruza de mes: {esMiPerfil ? 'tu' : 'la'} cuota de <span className="font-medium">{labelMes(mesDeFecha(vacInicio))}</span> se repartirá entre los presentes ({esMiPerfil ? 'estarás' : `${persona?.nombre} estará`} presente ~{Math.round(fraccionPresenteEnMesInicio({ fecha_inicio: vacInicio }) * 100)}% del mes).
                     </div>
                   ) : (
                     <div className="text-xs bg-stone-100 border border-stone-200 rounded-lg p-3 text-stone-600">
-                      Dentro del mismo mes: tu cuota se conserva, solo queda registrada.
+                      Dentro del mismo mes: {esMiPerfil ? 'tu' : 'la'} cuota se conserva, solo queda registrada.
                     </div>
                   )
                 )}
@@ -1926,35 +1915,32 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
                 })}
               </div>
             ) : (
-              !showVacForm && <p className="text-xs text-stone-400 italic">Aún no registras vacaciones.</p>
+              !showVacForm && <p className="text-xs text-stone-400 italic">{esMiPerfil ? 'Aún no registras vacaciones.' : `${persona?.nombre} aún no tiene vacaciones registradas.`}</p>
             )}
           </div>
         )}
 
-        {/* TARJETAS DE TOTALES ACUMULADOS */}
+        {/* ESTADÍSTICAS DE ACTIVIDAD (acumulado histórico, sin comparar) */}
         <div className="grid grid-cols-2 gap-3">
           <MetricCard
-            label={esConductor ? 'Km usados (total)' : 'Km recibidos (favores)'}
-            valor={formatKm(totales.km_usados)} color="#3D5A80"
-            comp={esConductor && <Comp valor={totales.km_usados} promedio={comparativa?.km_usados} unidad="km" invertirColor />}
+            label="Días que usó el auto"
+            valor={estadisticas.diasUsados.toLocaleString('es-CL')}
+            color="#3D5A80"
           />
           <MetricCard
-            label="$$ bencina extra (total)"
-            valor={formatClp(totales.clp_extra)} color="#E9C46A"
-            comp={esConductor && <Comp valor={totales.clp_extra} promedio={comparativa?.clp_extra} unidad="clp" />}
+            label="Viajes realizados"
+            valor={estadisticas.cantidadViajes.toLocaleString('es-CL')}
+            color="#2A9D8F"
           />
-          {esConductor && (
-            <MetricCard
-              label="Km en favores al hogar"
-              valor={formatKm(totales.km_favores)} color="#9D4EDD"
-              comp={<Comp valor={totales.km_favores} promedio={comparativa?.km_favores} unidad="km" invertirColor />}
-            />
-          )}
           <MetricCard
-            label="Balance neto (total)"
-            valor={(totales.balance >= 0 ? '+' : '') + formatKm(totales.balance)}
-            color={totales.balance >= 0 ? '#52796F' : '#BC4749'}
-            comp={esConductor && <Comp valor={totales.balance} promedio={comparativa?.balance} unidad="km" />}
+            label="Km recorridos (total)"
+            valor={formatKm(estadisticas.kmRecorridos)}
+            color="#E76F51"
+          />
+          <MetricCard
+            label="Aportes realizados"
+            valor={estadisticas.cantidadAportes.toLocaleString('es-CL')}
+            color="#E9C46A"
           />
         </div>
 
