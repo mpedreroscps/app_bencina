@@ -111,7 +111,7 @@ const mesAnterior = (ym, n = 1) => {
 };
 
 // ════════════════════════════════════════════════════════════
-//  HELPERS DE VACACIONES (NUEVO)
+//  HELPERS DE VACACIONES
 // ════════════════════════════════════════════════════════════
 // Devuelve "YYYY-MM" de una fecha "YYYY-MM-DD"
 const mesDeFecha = (fecha) => (fecha || '').slice(0, 7);
@@ -517,7 +517,7 @@ function MainApp({ session, miPersona, onLogout }) {
   const [personas, setPersonas] = useState([]);
   const [viajes, setViajes] = useState([]);
   const [cargas, setCargas] = useState([]);
-  const [vacaciones, setVacaciones] = useState([]); // NUEVO
+  const [vacaciones, setVacaciones] = useState([]);
   const [configuracion, setConfiguracion] = useState({ rendimiento_km_litro: null });
 
   const [loading, setLoading] = useState(false);
@@ -532,11 +532,11 @@ function MainApp({ session, miPersona, onLogout }) {
   const [editingViaje, setEditingViaje] = useState(null);
   const [editingCarga, setEditingCarga] = useState(null);
 
-  // NUEVO: mes que se está visualizando en el dashboard (YYYY-MM)
+  // Mes que se está visualizando en el dashboard (YYYY-MM)
   const mesActualSistema = new Date().toISOString().slice(0, 7);
   const [mesVisible, setMesVisible] = useState(mesActualSistema);
 
-  // NUEVO: vista de perfil de una persona (null = dashboard)
+  // Vista de perfil de una persona (null = dashboard)
   const [perfilPersonaId, setPerfilPersonaId] = useState(null);
 
   const today = () => new Date().toISOString().slice(0, 10);
@@ -562,7 +562,7 @@ function MainApp({ session, miPersona, onLogout }) {
         supa.from('viajes').select('*').eq('garage_id', garageId).order('created_at', { ascending: false }),
         supa.from('cargas').select('*').eq('garage_id', garageId).order('created_at', { ascending: false }),
         supa.from('configuracion').select('*').eq('garage_id', garageId).maybeSingle(),
-        // NUEVO: traemos las vacaciones del garage. Si la tabla no existe aún,
+        // Traemos las vacaciones del garage. Si la tabla no existe aún,
         // capturamos el error y dejamos la lista vacía para no romper la app.
         supa.from('vacaciones').select('*').eq('garage_id', garageId).order('fecha_inicio', { ascending: false })
       ]);
@@ -608,7 +608,7 @@ function MainApp({ session, miPersona, onLogout }) {
     return Math.max(0, Number(ultima.autonomia_despues) - consumido);
   }, [cargas, viajes]);
 
-  // NUEVO: contador del MES VISIBLE (parte de cero cada mes)
+  // Contador del MES VISIBLE (parte de cero cada mes)
   const movimientoMes = useMemo(() => {
     const cargadoMes = cargas.filter(c => c.fecha.startsWith(mesVisible)).reduce((s, c) => s + Number(c.km_aportados), 0);
     const consumidoMes = viajes.filter(v => v.fecha.startsWith(mesVisible)).reduce((s, v) => s + Number(v.km_recorridos), 0);
@@ -616,18 +616,60 @@ function MainApp({ session, miPersona, onLogout }) {
   }, [cargas, viajes, mesVisible]);
 
   // ════════════════════════════════════════════════════════════
-  //  CÁLCULO DE BALANCES POR MES (MODIFICADO para Modo Vacaciones)
+  //  CÁLCULO DE BALANCES POR MES (Modo Vacaciones, dos pasadas)
   // ════════════════════════════════════════════════════════════
-  // La novedad: el reparto de los aportes del HOGAR ya no es siempre 1/N.
-  // Si un conductor está de vacaciones cruzando de mes, recibe solo una
-  // FRACCIÓN de su parte (según días presentes), y el resto se reparte
-  // entre los conductores presentes.
+  // El reparto de los aportes del HOGAR no es siempre 1/N.
+  // Si un conductor está de vacaciones cruzando de mes Y va en POSITIVO,
+  // cede una fracción de su parte (según días presentes) a los conductores
+  // presentes. Si va atrasado, NO se reparte su cuota (sería repartir deuda).
+  //
+  // Para saber si va en positivo necesitamos el balance, pero el balance usa
+  // los pesos... círculo. Lo rompemos calculando en DOS pasadas:
+  //   1) con pesos planos (todos 1) para conocer el signo del balance
+  //   2) con los pesos reales de vacaciones
   const calcularBalancesParaMes = (mes) => {
     const N = conductores.length;
     if (N === 0) return [];
 
-    // --- Paso 1: calcular el "peso" de cada conductor para repartir aportes del hogar ---
-    // Peso normal = 1. Si está de vacaciones cruzando este mes, peso = fracción presente.
+    const cargasMes = cargas.filter(carga => carga.fecha.startsWith(mes));
+
+    // Total de km que aportó el HOGAR este mes (lo que se reparte entre conductores)
+    const totalAporteHogarMes = cargasMes.filter(carga => {
+      const p = personas.find(p => p.id === carga.pagado_por_id);
+      return p?.tipo === 'miembro_hogar';
+    }).reduce((s, carga) => s + Number(carga.km_aportados), 0);
+
+    // ── Función interna: calcula el balance de cada conductor dado un set de pesos ──
+    const calcularCon = (pesos) => {
+      const sumaPesos = conductores.reduce((s, c) => s + pesos[c.id], 0);
+      return conductores.map(c => {
+        const aporte_propio = cargasMes.filter(carga => carga.pagado_por_id === c.id).reduce((s, carga) => s + Number(carga.km_aportados), 0);
+        const clp_extra = cargasMes.filter(carga => carga.pagado_por_id === c.id && carga.tipo === 'extra').reduce((s, carga) => s + (Number(carga.monto_clp) || 0), 0);
+        const aporte_recibido = sumaPesos > 0 ? totalAporteHogarMes * (pesos[c.id] / sumaPesos) : 0;
+        const consumo_propio = viajes.filter(v => v.fecha.startsWith(mes) && !v.es_favor).reduce((sum, v) => {
+          const involucrados = [v.conductor_id, ...(v.acompanantes_ids || [])];
+          if (involucrados.includes(c.id)) return sum + Number(v.km_recorridos) / involucrados.length;
+          return sum;
+        }, 0);
+        const consumo_favor_compartido = viajes.filter(v => v.es_favor && v.fecha.startsWith(mes)).reduce((s, v) => s + Number(v.km_recorridos) / N, 0);
+        const consumo = consumo_propio + consumo_favor_compartido;
+        return {
+          ...c,
+          aporte_propio, aporte_recibido, clp_extra,
+          consumo_propio, consumo_favor_compartido, consumo,
+          balance: (aporte_propio + aporte_recibido) - consumo,
+        };
+      });
+    };
+
+    // ── Pasada 1: pesos planos (todos 1). Solo para conocer el signo del balance ──
+    const pesosPlanos = {};
+    conductores.forEach(c => { pesosPlanos[c.id] = 1; });
+    const balancePrevio = calcularCon(pesosPlanos);
+
+    // ── Pasada 2: pesos reales de vacaciones ──
+    // Solo reducimos el peso (=ceder cuota a los presentes) si la persona está
+    // de vacaciones cruzando este mes Y va en POSITIVO.
     const pesos = {};
     conductores.forEach(c => {
       const vac = vacaciones.find(v =>
@@ -635,38 +677,24 @@ function MainApp({ session, miPersona, onLogout }) {
         vacacionCruzaMes(v) &&
         mesDeFecha(v.fecha_inicio) === mes
       );
-      pesos[c.id] = vac ? fraccionPresenteEnMesInicio(vac) : 1;
+      const balPrevio = balancePrevio.find(b => b.id === c.id)?.balance ?? 0;
+      pesos[c.id] = (vac && balPrevio > 0) ? fraccionPresenteEnMesInicio(vac) : 1;
     });
-    const sumaPesos = conductores.reduce((s, c) => s + pesos[c.id], 0);
 
-    return conductores.map(c => {
-      const cargasMes = cargas.filter(carga => carga.fecha.startsWith(mes));
-      const aporte_propio = cargasMes.filter(carga => carga.pagado_por_id === c.id).reduce((s, carga) => s + Number(carga.km_aportados), 0);
-      // $$ aportado en bencina EXTRA (solo cargas tipo 'extra' pagadas por este conductor)
-      const clp_extra = cargasMes.filter(carga => carga.pagado_por_id === c.id && carga.tipo === 'extra').reduce((s, carga) => s + (Number(carga.monto_clp) || 0), 0);
+    const resultado = calcularCon(pesos);
 
-      // Aportes que vienen del HOGAR (miembros que pagaron). Antes se repartía /N.
-      // Ahora se reparte ponderado por el peso de cada conductor presente.
-      const totalAporteHogarMes = cargasMes.filter(carga => {
-        const p = personas.find(p => p.id === carga.pagado_por_id);
-        return p?.tipo === 'miembro_hogar';
-      }).reduce((s, carga) => s + Number(carga.km_aportados), 0);
-      const aporte_recibido = sumaPesos > 0 ? totalAporteHogarMes * (pesos[c.id] / sumaPesos) : 0;
-
-      const consumo_propio = viajes.filter(v => v.fecha.startsWith(mes) && !v.es_favor).reduce((sum, v) => {
-        const acomp = v.acompanantes_ids || [];
-        const involucrados = [v.conductor_id, ...acomp];
-        if (involucrados.includes(c.id)) return sum + Number(v.km_recorridos) / involucrados.length;
-        return sum;
-      }, 0);
-      const consumo_favor_compartido = viajes.filter(v => v.es_favor && v.fecha.startsWith(mes)).reduce((s, v) => s + Number(v.km_recorridos) / N, 0);
-      const consumo = consumo_propio + consumo_favor_compartido;
+    // ── Km redistribuidos por vacaciones ──
+    // Para quien cede cuota: cuánto MENOS recibió respecto a si no se hubiera ido.
+    // Ese mismo total llega como "extra" a los presentes.
+    return resultado.map(c => {
+      const recibidoSinVac = balancePrevio.find(b => b.id === c.id)?.aporte_recibido ?? c.aporte_recibido;
+      const km_cedidos = Math.max(0, recibidoSinVac - c.aporte_recibido);          // >0 solo si cedió
+      const km_recibidos_extra = Math.max(0, c.aporte_recibido - recibidoSinVac);  // >0 si le llegó cuota ajena
       return {
         ...c,
-        aporte_propio, aporte_recibido, clp_extra,
-        consumo_propio, consumo_favor_compartido, consumo,
-        balance: (aporte_propio + aporte_recibido) - consumo,
-        peso_vacaciones: pesos[c.id] // 1 = sin vacaciones; <1 = ausente parte del mes
+        peso_vacaciones: pesos[c.id], // 1 = sin vacaciones; <1 = cedió parte
+        km_cedidos,          // km que esta persona repartió a los demás por irse
+        km_recibidos_extra,  // km extra que recibió porque otro se fue
       };
     });
   };
@@ -674,13 +702,34 @@ function MainApp({ session, miPersona, onLogout }) {
   // Balances del mes VISIBLE (lo que muestra el dashboard)
   const conductorBalances = useMemo(() => calcularBalancesParaMes(mesVisible), [conductores, personas, cargas, viajes, vacaciones, mesVisible]);
 
+  // ════════════════════════════════════════════════════════════
+  //  REPARTO DEL ESTANQUE FÍSICO ENTRE CONDUCTORES (NUEVO)
+  // ════════════════════════════════════════════════════════════
+  // Reparte el estanque real (nivelActual) según el balance de cada conductor.
+  // Fórmula: cada uno parte con cuota base (nivel/N) y su balance lo desplaza
+  // respecto al promedio. Así la suma de porciones = nivelActual exacto, y quien
+  // va atrasado queda en NEGATIVO (los km que debe).
+  // Solo tiene sentido en el mes en curso (el estanque es el de hoy).
+  const conductorBalancesConEstanque = useMemo(() => {
+    const N = conductorBalances.length;
+    if (N === 0 || !esMesActual) {
+      return conductorBalances.map(c => ({ ...c, km_estanque: null }));
+    }
+    const base = nivelActual / N;
+    const balancePromedio = conductorBalances.reduce((s, c) => s + c.balance, 0) / N;
+    return conductorBalances.map(c => ({
+      ...c,
+      km_estanque: base + (c.balance - balancePromedio),
+    }));
+  }, [conductorBalances, nivelActual, esMesActual]);
+
   const miembroAportes = useMemo(() => miembros.map(m => ({
     ...m,
     aportado: cargas.filter(c => c.pagado_por_id === m.id && c.fecha.startsWith(mesVisible)).reduce((s, c) => s + Number(c.km_aportados), 0),
     recibido: viajes.filter(v => v.es_favor && v.para_quien_id === m.id && v.fecha.startsWith(mesVisible)).reduce((s, v) => s + Number(v.km_recorridos), 0)
   })), [miembros, cargas, viajes, mesVisible]);
 
-  // NUEVO: para "próximo en cargar" excluimos a quien está de vacaciones HOY.
+  // Para "próximo en cargar" excluimos a quien está de vacaciones HOY.
   // Solo aplica cuando estamos viendo el mes en curso.
   const proximo = useMemo(() => {
     if (conductorBalances.length === 0) return null;
@@ -833,7 +882,7 @@ function MainApp({ session, miPersona, onLogout }) {
   };
 
   // ════════════════════════════════════════════════════════════
-  //  ACCIONES DE VACACIONES (NUEVO)
+  //  ACCIONES DE VACACIONES
   // ════════════════════════════════════════════════════════════
   const saveVacacion = async (personaId, fechaInicio, fechaRetorno) => {
     setLoading(true); setError('');
@@ -914,7 +963,7 @@ function MainApp({ session, miPersona, onLogout }) {
     finally { setLoading(false); }
   };
 
-  // NUEVO: Cerrar mes — NO borra nada. Solo deja registro del cierre y limpia el panel
+  // Cerrar mes — NO borra nada. Solo deja registro del cierre y limpia el panel
   // moviendo la vista al mes nuevo. El histórico queda intacto para los perfiles.
   const cerrarMes = async () => {
     setLoading(true); setError('');
@@ -1103,7 +1152,7 @@ function MainApp({ session, miPersona, onLogout }) {
               <span className="text-xs uppercase tracking-wider font-medium" style={{ color: nivelColor }}>nivel {labelByLevel(nivelActual)}</span>
             </div>
 
-            {/* NUEVO: contador del mes (parte de cero cada mes) */}
+            {/* Contador del mes (parte de cero cada mes) */}
             <div className="mt-5 pt-4 border-t border-white/10 flex items-center gap-5">
               <div>
                 <div className="text-stone-500 uppercase tracking-widest font-semibold" style={{ fontSize: '9px' }}>Cargado · {labelMesCorto(mesVisible)}</div>
@@ -1142,13 +1191,13 @@ function MainApp({ session, miPersona, onLogout }) {
         )}
 
         {/* CONDUCTORES */}
-        {conductorBalances.length > 0 && (
+        {conductorBalancesConEstanque.length > 0 && (
           <div className="bg-white rounded-2xl border border-stone-200 mb-4 overflow-hidden">
             <div className="px-5 pt-4 pb-2 uppercase tracking-widest text-stone-500 flex items-center gap-1.5 font-semibold" style={{ fontSize: '10px' }}>
               <CarIcon className="w-3 h-3" />Conductores · {labelMes(mesVisible)}
             </div>
-            {conductorBalances.map((c, i) => (
-              <button key={c.id} onClick={() => setPerfilPersonaId(c.id)} className={`w-full text-left px-5 py-3.5 hover:bg-stone-50 transition-colors ${i < conductorBalances.length - 1 ? 'border-b border-stone-100' : ''}`}>
+            {conductorBalancesConEstanque.map((c, i) => (
+              <button key={c.id} onClick={() => setPerfilPersonaId(c.id)} className={`w-full text-left px-5 py-3.5 hover:bg-stone-50 transition-colors ${i < conductorBalancesConEstanque.length - 1 ? 'border-b border-stone-100' : ''}`}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2.5">
                     <div className="w-1.5 h-9 rounded-full" style={{ background: c.color }} />
@@ -1158,8 +1207,16 @@ function MainApp({ session, miPersona, onLogout }) {
                       <UserIcon className="w-3 h-3 text-stone-300" />
                     </div>
                   </div>
-                  <div className={`font-display tabular-nums ${c.balance < 0 ? 'text-red-600' : c.balance > 0 ? 'text-emerald-700' : 'text-stone-600'}`} style={{ fontWeight: 600, fontSize: '1.125rem', letterSpacing: '-0.01em' }}>
-                    {c.balance >= 0 ? '+' : ''}{formatKm(c.balance)}
+                  {/* Balance del mes + porción del estanque físico */}
+                  <div className="text-right">
+                    <div className={`font-display tabular-nums ${c.balance < 0 ? 'text-red-600' : c.balance > 0 ? 'text-emerald-700' : 'text-stone-600'}`} style={{ fontWeight: 600, fontSize: '1.125rem', letterSpacing: '-0.01em' }}>
+                      {c.balance >= 0 ? '+' : ''}{formatKm(c.balance)}
+                    </div>
+                    {c.km_estanque !== null && (
+                      <div className="tabular-nums mt-0.5" style={{ fontSize: '11px', color: c.km_estanque < 0 ? '#BC4749' : '#52796F' }}>
+                        le quedan {c.km_estanque >= 0 ? '' : '−'}{formatKm(Math.abs(c.km_estanque))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="text-xs text-stone-500 ml-5">
@@ -1169,6 +1226,17 @@ function MainApp({ session, miPersona, onLogout }) {
                   {c.consumo_favor_compartido > 0 && (
                     <div className="text-stone-400 italic mt-0.5" style={{ fontSize: '11px' }}>
                       ↳ {formatKm(c.consumo_propio)} propios + {formatKm(c.consumo_favor_compartido)} de favores compartidos
+                    </div>
+                  )}
+                  {/* Km redistribuidos por vacaciones */}
+                  {c.km_cedidos > 0.05 && (
+                    <div className="italic mt-0.5" style={{ fontSize: '11px', color: '#2A9D8F' }}>
+                      ✈️ cedió {formatKm(c.km_cedidos)} a los presentes por vacaciones
+                    </div>
+                  )}
+                  {c.km_recibidos_extra > 0.05 && (
+                    <div className="italic mt-0.5" style={{ fontSize: '11px', color: '#2A9D8F' }}>
+                      ✈️ +{formatKm(c.km_recibidos_extra)} recibidos de quien está de vacaciones
                     </div>
                   )}
                 </div>
@@ -1653,7 +1721,7 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
   const persona = personas.find(p => p.id === personaId);
   const esConductor = persona?.tipo === 'conductor';
 
-  // NUEVO: estado del formulario de vacaciones (solo se muestra en TU propio perfil)
+  // Estado del formulario de vacaciones
   const [showVacForm, setShowVacForm] = useState(false);
   const hoy = new Date().toISOString().slice(0, 10);
   const [vacInicio, setVacInicio] = useState(hoy);
@@ -1731,14 +1799,13 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
   }, [filasMes]);
 
   // ════════════════════════════════════════════════════════════
-  //  ESTADÍSTICAS DE ACTIVIDAD (NUEVO): datos acumulados sin comparar
+  //  ESTADÍSTICAS DE ACTIVIDAD: datos acumulados sin comparar
   // ════════════════════════════════════════════════════════════
   // Cuenta TODO viaje donde la persona participó de cualquier forma:
   //  - como conductor principal (conductor_id)
   //  - como acompañante (dentro de acompanantes_ids)
   //  - como beneficiario de un favor (para_quien_id, cuando es_favor)
   const estadisticas = useMemo(() => {
-    // Filtramos los viajes en los que esta persona estuvo involucrada
     const viajesMios = viajes.filter(v => {
       const esPrincipal = v.conductor_id === personaId;
       const esAcompanante = (v.acompanantes_ids || []).includes(personaId);
@@ -1746,14 +1813,10 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
       return esPrincipal || esAcompanante || esBeneficiario;
     });
 
-    // Km recorridos: suma de los km de esos viajes
     const kmRecorridos = viajesMios.reduce((s, v) => s + Number(v.km_recorridos), 0);
-
-    // Días distintos en que usó el auto: usamos un Set de fechas únicas.
-    // Si hizo 3 viajes el mismo día, cuenta como 1 solo día.
+    // Días distintos en que usó el auto (Set de fechas únicas)
     const diasUnicos = new Set(viajesMios.map(v => v.fecha)).size;
-
-    // Cantidad de aportes: número de cargas que ESTA persona pagó
+    // Cantidad de cargas que ESTA persona pagó
     const cantidadAportes = cargas.filter(c => c.pagado_por_id === personaId).length;
 
     return {
@@ -1765,10 +1828,8 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
   }, [viajes, cargas, personaId]);
 
   // ════════════════════════════════════════════════════════════
-  //  RANKING (NUEVO): posición de este conductor por km usados totales
+  //  RANKING: posición de este conductor por km usados totales
   // ════════════════════════════════════════════════════════════
-  // Calculamos el total de km usados de CADA conductor (acumulado) y ordenamos
-  // de mayor a menor. La posición 1 = quien más usó el auto.
   const ranking = useMemo(() => {
     if (!esConductor) return null;
     const totalesPorConductor = conductores.map(c => {
@@ -1779,7 +1840,6 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
       });
       return { id: c.id, nombre: c.nombre, kmTotal };
     });
-    // Orden descendente por km usados
     totalesPorConductor.sort((a, b) => b.kmTotal - a.kmTotal);
     const pos = totalesPorConductor.findIndex(x => x.id === personaId) + 1;
     return { posicion: pos, total: totalesPorConductor.length, lista: totalesPorConductor };
@@ -1791,7 +1851,7 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
   // Máximo de km usados para escalar el gráfico
   const maxKmMes = Math.max(...filasMes.map(f => f.km_usados), 1);
 
-  // ¿Es mi propio perfil? Solo ahí puedo registrar vacaciones.
+  // ¿Es mi propio perfil?
   const esMiPerfil = persona?.id === miPersona.id;
 
   return (
@@ -1808,7 +1868,6 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
           <div className="flex-1">
             <h1 className="font-display flex items-center gap-2 flex-wrap" style={{ fontWeight: 600, fontSize: '1.75rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
               {persona?.nombre}{persona?.id === miPersona.id && <span className="text-sm text-stone-500">(tú)</span>}
-              {/* NUEVO: badge de vacaciones, solo en el perfil personal */}
               {deVacacionesHoy && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium font-body" style={{ background: '#2A9D8F20', color: '#2A9D8F' }}>
                   <PalmIcon className="w-3 h-3" />De vacaciones
@@ -1819,7 +1878,7 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
           </div>
         </div>
 
-        {/* NUEVO: línea de ranking, solo para conductores */}
+        {/* Línea de ranking, solo para conductores */}
         {esConductor && ranking && ranking.total > 1 && (
           <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-stone-200">
             <TrophyIcon className="w-3.5 h-3.5" style={{ color: '#E9C46A' }} />
@@ -1836,7 +1895,7 @@ function PerfilPersona({ personaId, personas, conductores, cargas, viajes, vacac
       </div>
 
       <div className="px-5 space-y-4">
-        {/* TARJETA DE MODO VACACIONES (cualquiera puede registrar, incluso de otra persona) */}
+        {/* TARJETA DE MODO VACACIONES (cualquiera puede registrar) */}
         {(
           <div className="bg-white rounded-2xl border border-stone-200 p-5">
             <div className="flex items-center justify-between mb-1">
